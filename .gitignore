@@ -1,0 +1,12 @@
+## Matlab temporary files:
+*.asv
+
+## Compiled files
+*.mexw64
+*.mexa64
+*.mexmaci64
+*.p
+results*.mat
+internal*.m
+internal/*
+_internal/*
