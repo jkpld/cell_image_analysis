@@ -1,5 +1,5 @@
-function [out] = GLCMFeatures(glcm)
-% GLCMFEATURESJK Compute the 13 Haralick features for each page of the glcm
+function features = GLCMFeatures(glcm)
+% GLCMFEATURES Compute the 13 Haralick features for each page of the glcm
 % matrix. (These are the 13 texture features used by CellProfiler.)
 %
 % Features computed 
@@ -42,15 +42,12 @@ else
     end  
 end
 
-
-
 % Get size of GLCM
 nGrayLevels = size(glcm,1);
 nglcm = size(glcm,3);
 
 % Normalize the GLCMs
 glcm = glcm./sumUp(glcm);
-
 
 % Create indices for vectorising code:
 I = (1:nGrayLevels).*ones(nGrayLevels,1);
@@ -68,7 +65,7 @@ correlation             = (sumUp(I.*J.*glcm) - uX.*uY)./sqrt(sX.*sY);
 energy                  =  sumUp( glcm .^ 2                  );
 entropy                 = -sumUp( glcm .* log(glcm)          );
 inverseDifferenceMoment =  sumUp( glcm ./ ( 1 + (I-J).^2)    );
-sumOfSquaresVariance    =  sumUp( glcm .* (I-uX).^2          );
+sumOfSquaresVariance    =  sX;
 
 tmp1 = (I+J) + permute((0:nglcm-1)*(2*nGrayLevels-1),[1,3,2]) - 1;
 tmp2 = abs(I-J) + tmpOffsetInd + 1;
@@ -97,10 +94,12 @@ HXY2 = -sumUp( tmp  .* log(tmp)   );
 HX =   -sum(   pX   .* log(pX)    , 1, 'omitnan');
 HY =   -sum(   pY   .* log(pY)    , 1, 'omitnan');
 
-informationMeasureOfCorrelation1 = (entropy - HXY1) ./ max(HX,HY);
+informationMeasureOfCorrelation1 = (entropy - HXY1) ./ max(HX,HY); 
 informationMeasureOfCorrelation2 = sqrt(1 - exp(-2.*(HXY2 - entropy)));
+% these infomration features match the result from CellProfiler 1.0, but
+% not CellProfiler 2.0
 
-out = [contrast(:),...
+features = [contrast(:),...
 correlation(:),...
 differenceEntropy(:),...
 differenceVariance(:),...
