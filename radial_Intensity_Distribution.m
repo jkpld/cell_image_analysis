@@ -12,7 +12,7 @@ function [Mu, Sigma] = radial_Intensity_Distribution(BW, I, options)
 %    Number_of_Rings : The number of rings to compute
 %    Ring_Width : The width of the rings
 %    Use_GPU : boolian flag determining if a GPU is used to speed up the
-%    computation
+%    computation.
 %
 % Output
 %  Mu : N x (Number_of_Rings + 1) array giving the mean intensity value for
@@ -48,14 +48,15 @@ useGPU = options.Use_GPU;
 % Note: below I clear all variables that are no longer needed. This can be
 % helpful when working on a GPU.
 
+I = single(I(BW)); % only need the intensities of the objects
+
 if useGPU
     % If using gpu, then send over the arrays.
-    I_full = gpuArray(single(I(BW)));
+    I = gpuArray(I); 
     BW = gpuArray(BW);
+else
+    
 end
-
-% Remove intensity values not apart of an object.
-I = I_full(BW); clear I_full;
 
 % Compute distance transform. This is used for computing the pixels in each
 % ring. 
@@ -70,7 +71,11 @@ N_obj = max(L); % The number of objects
 N_D = numel(D); % The number of object pixels 
 
 % Create a temporary array that holds the logical indices for layer
-layer_idx = [gpuArray.false(N_D,1), D > ( N_R-1:-1:1 ) * W, gpuArray.true(N_D,1)]; clear D
+if useGPU
+    layer_idx = [gpuArray.false(N_D,1), D > ( N_R-1:-1:1 ) * W, gpuArray.true(N_D,1)]; clear D
+else
+    layer_idx = [false(N_D,1), D > ( N_R-1:-1:1 ) * W, true(N_D,1)]; clear D
+end
 
 % The pixels belonging to each ring are the difference between the upper
 % layer and the current layer.
@@ -101,10 +106,15 @@ vals = I(ring_linidx); clear ring_linidx I;
 
 % Compute the number of pixels in each ring of each object. The default
 % value is 1, to prevent the NaN when computing the mean.
-N = accumarray(inds, gpuArray.ones(numel(vals),1,'signle'), [N_obj, N_R], @sum, single(1));
+
+if useGPU
+    N = accumarray(inds, gpuArray.ones(numel(vals),1,'single'), [N_obj, N_R], @sum, single(1));
+else
+    N = accumarray(inds, ones(numel(vals),1,'single'), [N_obj, N_R], @sum, single(1));
+end
 
 % Compute the sum of the intensities in each ring of each object
-S = accumarray(inds, vals, [N_obj, N_R], @sum, single(0));
+S = accumarray(inds, vals, [N_obj, N_R], @sum);
 
 % Compute the mean intensity in each ring of each object
 Mu = S ./ N;
@@ -117,19 +127,22 @@ if nargout > 1
     Var_i = (vals - Mu(inds(:,1) + (inds(:,2)-1)*N_obj)).^2; clear vals
     
     % Compute the variance in each ring for each object
-    Var = accumarray(inds, Var_i, [N_obj, N_R], @sum, single(0)); clear Var_i inds
+    Var = accumarray(inds, Var_i, [N_obj, N_R], @sum); clear Var_i inds
     
     % Compute the standard deviation
     Sigma = sqrt(Var./(N-1)); clear Var
     
     % Replace any Inf's with 0.
     Sigma(N==1) = 0;
+    
 end
 
 if useGPU
     % If using gpu, then gather the results
     Mu = gather(Mu);
-    Sigma = gather(Sigma);
+    if nargout > 1
+        Sigma = gather(Sigma);
+    end
 end
 
 end
