@@ -47,24 +47,28 @@ useGPU = options.Use_GPU;
 
 % Note: below I clear all variables that are no longer needed. This can be
 % helpful when working on a GPU.
+I = double(I(BW));
 
-I = single(I(BW)); % only need the intensities of the objects
+% Compute distance transform. This is used for computing the pixels in each
+% ring. 
+%    NOTE : There is some error with computing the dist. trans. on the GPU
+%    with large images (1000x1000 works but 1500x1500 does not). Therefore,
+%    compute it on the CPU, even though this is much slower. 
+%    TODO : Try to get the distance transform to work on the GPU.
+D_full = bwdist(~BW);
+D = double(D_full(BW)); clear D_full;
 
 if useGPU
     % If using gpu, then send over the arrays.
     I = gpuArray(I); 
     BW = gpuArray(BW);
-else
-    
+    D = gpuArray(D);
 end
 
-% Compute distance transform. This is used for computing the pixels in each
-% ring. 
-D_full = bwdist(~BW);
-D = D_full(BW); clear D_full;
+
 
 % Compute the label matrix to identify each ring with a specific object
-L_full = single(bwlabel(BW));
+L_full = double(bwlabel(BW));
 L = L_full(BW); clear L_full BW;
 
 N_obj = max(L); % The number of objects
@@ -72,9 +76,9 @@ N_D = numel(D); % The number of object pixels
 
 % Create a temporary array that holds the logical indices for layer
 if useGPU
-    layer_idx = [gpuArray.false(N_D,1), D > ( N_R-1:-1:1 ) * W, gpuArray.true(N_D,1)]; clear D
+    layer_idx = [gpuArray.false(N_D,1), D > ( N_R-1:-1:1 ) * W, gpuArray.true(N_D,1)]; %clear D
 else
-    layer_idx = [false(N_D,1), D > ( N_R-1:-1:1 ) * W, true(N_D,1)]; clear D
+    layer_idx = [false(N_D,1), D > ( N_R-1:-1:1 ) * W, true(N_D,1)]; %clear D
 end
 
 % The pixels belonging to each ring are the difference between the upper
@@ -108,9 +112,15 @@ vals = I(ring_linidx); clear ring_linidx I;
 % value is 1, to prevent the NaN when computing the mean.
 
 if useGPU
-    N = accumarray(inds, gpuArray.ones(numel(vals),1,'single'), [N_obj, N_R], @sum, single(1));
+    N = accumarray(inds, gpuArray.ones(numel(vals),1,'double'), [N_obj, N_R], @sum, double(1));
 else
-    N = accumarray(inds, ones(numel(vals),1,'single'), [N_obj, N_R], @sum, single(1));
+%     N = accumarray(inds, ones(numel(vals),1,'double'), [N_obj, N_R], @sum, double(1));
+    N = double(full(sparse(double(inds(:,1)), double(inds(:,2)), ones(numel(vals),1), double(N_obj), N_R)));
+    N(N==0) = 1;
+    
+    % For some reason using sparse instead of accumarray here is faster for
+    % computing N, but it is slower for computing the other quantities that
+    % use accumarray below.
 end
 
 % Compute the sum of the intensities in each ring of each object
@@ -140,6 +150,8 @@ end
 if useGPU
     % If using gpu, then gather the results
     Mu = gather(Mu);
+%     N = gather(N);
+%     D = gather(D);
     if nargout > 1
         Sigma = gather(Sigma);
     end
