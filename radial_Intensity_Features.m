@@ -1,9 +1,9 @@
-function [Mu, Sigma] = radial_Intensity_Distribution(BW, I, options)
-% RADIAL_INTENSITY_DISTRIBUTION Compute the mean and standard deviation of
+function [Mu, Sigma] = radial_Intensity_Features(BW, I, options)
+% RADIAL_INTENSITY_Features Compute the mean and standard deviation of
 % object intensity values in concentric rings.
 %
-% Mu = radial_Intensity_Distribution(BW, I, options)
-% [Mu, Sigma] = radial_Intensity_Distribution(BW, I, options)
+% Mu = radial_Intensity_Features(BW, I, options)
+% [Mu, Sigma] = radial_Intensity_Features(BW, I, options)
 %
 % Input
 %  BW : binary mask of objects
