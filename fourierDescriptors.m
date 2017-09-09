@@ -12,9 +12,11 @@ function [Z, Z_shapeReproduction] = fourierDescriptors(B,N1,N2,useParallel)
 %     resized in parallel.
 %
 % Output
-%   Z : N x N2 array of translation, rotation, and scale invariant fourier
-%     descriptors. Use these for as features for any machine learning. N is
-%     the number of boundary elements.
+%   Z : N x (N2-2) array of translation, rotation, and scale invariant
+%     fourier descriptors. Use these for as features for any machine
+%     learning. N is the number of boundary elements. There are N2-2
+%     columns because the first and last columns of these translation and
+%     scale invariant features is always 0 and 1 respectively.
 %   Z_shapeReproduction : N x N2 array of fourier descriptors that maintain
 %     all translation, rotation, and scale information. Use these if you
 %     want to recover the original objects exact position.
@@ -24,7 +26,7 @@ function [Z, Z_shapeReproduction] = fourierDescriptors(B,N1,N2,useParallel)
 % The fourier transform will be computed Row i of matrix Z will correspond
 % to boundary B{i}
 %
-% Note: N2 should be negative.
+% Note: N2 should be even.
 % Note: The boundaries must have clockwise orientation.
 
 % James Kapaldo
@@ -65,6 +67,10 @@ end
 Z = abs(Z); % rotation invariance
 Z(1,:) = 0; % translation invariance
 Z = Z ./ Z(end,:); % scale invariance
+
+% remove constant quantities, which provide zero information about the
+% shape
+Z([1,end],:) = []; 
 
 % Transpose so that each row is an obect and each column a feature.
 Z = Z.';
