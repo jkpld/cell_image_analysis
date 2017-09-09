@@ -5,7 +5,7 @@ function G = measureGranularity(I,mask,options)
 % G = measureGranularity(I,mask,options)
 %
 % Input
-%   I : image
+%   I : image, single or double between [0,1]
 %   maks : object mask
 %   options : structure with the following fields
 %     SubSampleSize - the factor to re-size the image by before computing
@@ -33,12 +33,6 @@ Use_GPU = options.Use_GPU;
 sz = size(I);
 
 mask = mask>0;
-I = single(I);
-% The im2uint8 function used below (which calls a mex function) requires
-% the image to be in the range [0,1]
-I = I - min(I(:));
-I = I/max(I(:));
-
 
 %% Subsample
 
@@ -49,7 +43,7 @@ end
 
 if SubSampleSize ~= 1
     I = imresize(I, SubSampleSize);
-    mask = imresize(mask, SubSampleSize)>0.5;
+    mask = imresize(single(mask), SubSampleSize)>0.5;
 end
 
 %% Background correct
@@ -57,7 +51,7 @@ end
 % Resize image and mask
 if BackgroundSampleSize ~= 1
     Ism = imresize(I, BackgroundSampleSize);
-    mask_sm = imresize(mask, BackgroundSampleSize)>0.5;
+    mask_sm = imresize(single(mask), BackgroundSampleSize)>0.5;
 else
     Ism = I;
     mask_sm = mask;
@@ -102,9 +96,9 @@ currentmean = startmean;
 
 % initialize granular spectrum
 if Use_GPU
-    G = gpuArray.zeros(N,GranularSpectrumLength);
+    G = gpuArray.zeros(N,GranularSpectrumLength,'single');
 else
-    G = zeros(N,GranularSpectrumLength);
+    G = zeros(N,GranularSpectrumLength,'single');
 end
 
 % compute granular spectrum on gpu
