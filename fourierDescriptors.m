@@ -21,6 +21,8 @@ function [Z, Z_shapeReproduction] = fourierDescriptors(B,N1,N2,useParallel)
 %     all translation, rotation, and scale information. Use these if you
 %     want to recover the original objects exact position.
 %
+% - output variables are class Single
+%
 % This function will first resize each boundary to have N1 elements (so
 % that the frequency components returned for each boundary are the same).
 % The fourier transform will be computed Row i of matrix Z will correspond
@@ -48,6 +50,7 @@ else
     end
 end
 
+s = single(s);
 
 Z = fft(s);
 
