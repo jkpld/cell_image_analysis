@@ -10,14 +10,15 @@ function features = extractGLCMFeatures(I,L,options)
 %   I : image
 %   L : label matrix
 %   options : structure with the following fields
-%     D : offset distance
+%     D : offset distances
 %     useGPU : Use GPU to speed up computation. (optional, defualt is
 %       false) Using a GPU more than doubles the speed on my computer.
 %
 % Output
-%   features : N x 13, N is the number of objects :: N = max(L(:)) and 13
-%   is the number of features. The features are measured along
-%   [0,45,90,135] degrees and averaged.
+%   features : N x 13*ND array. N is the number of objects, 13 is the
+%     number of features per offset distance,  and ND is the number of
+%     offset distances.  The features are measured along [0,45,90,135]
+%     degrees and averaged. 
 %         contrast 
 %         correlation 
 %         differenceEntropy 
@@ -31,10 +32,15 @@ function features = extractGLCMFeatures(I,L,options)
 %         sumEntropy 
 %         sumOfSquaresVariance 
 %         sumVariance 
+%
+% These are the same 13 Haralick features that CellProfiler outputs. The
+% results match cellprofiler; hwoever, the information features matche
+% CellProfiler 1, but not CellProfiler 2.
 
 % James Kapaldo
 
-D = options.Offset;
+D = options.Offset(:);
+N_D = numel(D);
 useGPU = options.Use_GPU;
 
 NL = 8; % Use 8 levels.
@@ -42,8 +48,11 @@ NL = 8; % Use 8 levels.
 L = cast(L,'like',I); % Make L the same class as I
 numObjs = max(L(:)); % Number of objects
 
-offsets = [0,D; -D,D; -D,0; -D,-D]; % Direction offsets
-features = zeros(numObjs,13); % Initialize features matrix
+% Direction offsets
+offsets = [0, -1, -1, -1; 1, 1, 0, -1];
+offsets = reshape(offsets.*permute(D,[3,2,1]),2,4*N_D)';
+
+features = zeros(numObjs,13*N_D); % Initialize features matrix
 
 % If using GPU, then send the arrays to the GPU
 if useGPU
@@ -64,8 +73,9 @@ objRange = objMax - objMin; % object range
 L(BG) = NaN; % Set all non object pixels to NaN
 
 % Pad the arrays for circular shifting
-I = padarray(I,[D,D], 0);
-L = padarray(L,[D,D], NaN);
+maxD = max(D);
+I = padarray(I,[maxD,maxD], 0);
+L = padarray(L,[maxD,maxD], NaN);
 
 
 % Compute the GLCM matrix and then the Harlick features for each direction
@@ -97,7 +107,8 @@ for i = 1:size(offsets,1)
     end
 
     % Add the features
-    features = features + GLCMFeatures(GLCM);
+    feat_idx = (1:13) + floor((i-1)/4)*13;
+    features(:,feat_idx) = features(:,feat_idx) + GLCMFeatures(GLCM);
 end
 
 % Get the mean feature values over each direction
