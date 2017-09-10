@@ -1,4 +1,4 @@
-function features = extractGLCMFeatures(I,L,D,useGPU)
+function features = extractGLCMFeatures(I,L,options)
 % EXTRACTGLCMFEATURES Compute the 13 Haralick features from the gray
 % co-occurance matrix for each object in an image.
 %
@@ -9,9 +9,10 @@ function features = extractGLCMFeatures(I,L,D,useGPU)
 % Input
 %   I : image
 %   L : label matrix
-%   D : offset distance
-%   useGPU : Use GPU to speed up computation. (optional, defualt is false)
-%       Using a GPU more than doubles the speed on my computer.
+%   options : structure with the following fields
+%     D : offset distance
+%     useGPU : Use GPU to speed up computation. (optional, defualt is
+%       false) Using a GPU more than doubles the speed on my computer.
 %
 % Output
 %   features : N x 13, N is the number of objects :: N = max(L(:)) and 13
@@ -33,9 +34,8 @@ function features = extractGLCMFeatures(I,L,D,useGPU)
 
 % James Kapaldo
 
-if nargin < 4
-    useGPU = false;
-end
+D = options.Offset;
+useGPU = options.Use_GPU;
 
 NL = 8; % Use 8 levels.
 
