@@ -43,7 +43,7 @@ classdef RadialIntensity < FeatureGroup
         
         function names = get.FeatureNames(obj)
             NR = obj.Options.Number_of_Rings;
-            W = obj.Options.Ringe_Width;
+            W = obj.Options.Ring_Width;
             featList = (["Mean_", "Std_"] + "W" + string(W) + "_") ...
                 + ["Center", "R" + string(NR:-1:1)]';
             featList = featList(:)'           ;
