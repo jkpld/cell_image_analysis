@@ -7,7 +7,7 @@ classdef HaralickTexture < FeatureGroup
             obj.GroupName = class(obj);
             
             % Default options
-            defaultOptions = struct('Offset',1,'Use_GPU',0);
+            defaultOptions = struct('PixelOffset',1,'Use_GPU',0);
             obj.requiredOptions = fieldnames(defaultOptions)';
             
             if nargin < 2
@@ -21,7 +21,7 @@ classdef HaralickTexture < FeatureGroup
         end
         
         function names = get.FeatureNames(obj)
-            D = obj.Options.Offset;
+            D = obj.Options.PixelOffset;
             featList = [...
                 "Contrast", ...
                 "Corr", ...
@@ -71,7 +71,7 @@ classdef HaralickTexture < FeatureGroup
             
             % James Kapaldo
             
-            D = obj.Options.Offset(:);
+            D = obj.Options.PixelOffset(:);
             useGPU = obj.Options.Use_GPU;
             N_D = numel(D);
             
