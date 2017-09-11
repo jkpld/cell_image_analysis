@@ -40,9 +40,7 @@ classdef Shape < FeatureGroup
     properties (Dependent, SetAccess = protected)
         FeatureNames
     end
-    properties (Access = private, Hidden)
-        Locator
-    end
+    
     methods
         function obj = Shape(channel,options)
             obj.GroupName = class(obj);
@@ -65,21 +63,16 @@ classdef Shape < FeatureGroup
                 warning('Shape:NFD_lt_3', 'The minimum number of Fourier descriptors is 3, because two of the Fourier descriptors are constrainted (and removed) to achive translation and scale invariance. The number of Fourier descriptors has been icnreased to 3.')
                 obj.Options.Number_Fourier_Descriptors = 3;
             end
-            if obj.Options.Number_Fourier_Descriptors < obj.Options.Number_Boundary_Vertices
+            if obj.Options.Number_Fourier_Descriptors >= obj.Options.Number_Boundary_Vertices
                 warning('Shape:NFD_lt_NBV', 'The number of Fourier descriptors must be less than the number of boundary vertices. The number of Fourier descriptors has been reduced.')
                 obj.Options.Number_Fourier_Descriptors = obj.Options.Number_Boundary_Vertices;
             end
             
             if nargin >= 1
-                if (channel ~= '') || ~isempty(channel)
+                if ~strcmp(channel, '') || ~isempty(channel)
                     warning('Shape:channelNotUsed', 'The Shape FeatureGroup does not operate on an image channel. Channel given will be ignored.')
                 end
             end
-            
-            % Add a Location FeatureGroup that will be used to extract the
-            % Location features if they are not provided to Compute.
-            obj.Locator = Location([], struct('Use_GPU', obj.Options.Use_GPU));
-            
         end
         
         function names = get.FeatureNames(obj)

@@ -32,7 +32,7 @@ classdef Location < FeatureGroup
             obj.Options = options;
             
             if nargin >= 1
-                if (channel ~= '') || ~isempty(channel)
+                if ~strcmp(channel, '') || ~isempty(channel)
                     warning('Location:channelNotUsed', 'The Location FeatureGroup does not operate on an image channel. Channel given will be ignored.')
                 end
             end
