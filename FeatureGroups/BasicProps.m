@@ -1,6 +1,6 @@
 classdef BasicProps < FeatureGroup
-    % BASICPROPS Compute the basic properties (the integrated intensity and
-    % area) for each object in an image
+    % BASICPROPS Compute the basic properties (centroid, integrated
+    % intensity, and area) for each object in an image
     %
     % Properties :
     %
@@ -11,7 +11,7 @@ classdef BasicProps < FeatureGroup
     % Methods :
     %
     % Compute(I, L) - Compute the integrated intensity from image, I, for each
-    % object in label matrix, L, and the area of each object.
+    % object in label matrix, L, and the area and centroid of each object.
     %   x = BasicProps.Compute(I, L)
     properties (Dependent, SetAccess = protected)
         FeatureNames
@@ -35,13 +35,16 @@ classdef BasicProps < FeatureGroup
         end
         
         function names = get.FeatureNames(obj)
-            names = obj.GroupName + ...
-                ["Area", obj.Channel + "_IntegratedIntensity"];
+            names = obj.GroupName + "_" + ...
+                ["Area", ...
+                 "Centroid_" + ["X","Y"], ...
+                 "Intensity_" + obj.Channel + "_Integrated"];
         end
         
         function x = Compute(obj, I, L)
-            % BASICPROPS.COMPUTE Return the area and integrated intensity
-            % for each object in an image I labeled with matrix L.
+            % BASICPROPS.COMPUTE Return the area, centroid, and integrated
+            % intensity for each object in an image I labeled with matrix
+            % L.
             %
             % x = BasicProps.Compute(I, L)
             %
@@ -50,7 +53,7 @@ classdef BasicProps < FeatureGroup
             %  L : object label matrix
             %
             % Output
-            %  x : N x 2 array where N is the number of objects, and each
+            %  x : N x 4 array where N is the number of objects, and each
             %    column corresponds to FeatureNames
             
             % James Kapaldo
@@ -59,15 +62,25 @@ classdef BasicProps < FeatureGroup
             
             FG = L~=0;
             
+            nRow = size(L,1);
+            linIdx = single(1:nmel(L))';
+            
             I = single(I(FG));
             L = single(L(FG));
+            linIdx = linIdx(FG);
             
             if useGPU
                 I = gpuArray(I);
                 L = gpuArray(L);
+                linIdx = gpuArray(linIdx);
+                nRow = gpuArray(nRow);
             end
             
             N_obj = max(L);
+            
+            % Row and column indices
+            y = rem(linIdx-1, nRow) + 1;
+            x = (linIdx - y)/nRow + 1; clear linIdx nRow;
             
             % Pixels per object
             if useGPU
@@ -78,10 +91,14 @@ classdef BasicProps < FeatureGroup
                 N(N==0) = 1;
             end
             
+            % Centroids
+            x_mu = accumarray(L, x) ./ N;
+            y_mu = accumarray(L, y) ./ N;
+            
             % Integrated intensity
             S = accumarray(L, I, [N_obj, 1], @sum);
             
-            x = [N, S];
+            x = [N, x_mu, y_mu, S];
             
             if useGPU
                 x = gather(x);
