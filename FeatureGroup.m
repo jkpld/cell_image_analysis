@@ -1,10 +1,10 @@
 classdef (Abstract) FeatureGroup < matlab.mixin.Heterogeneous
     properties
-        Channel(1,:) char = ''
+        Channel(1,1) string = ""
         Options(1,1) struct
     end
     properties (SetAccess = protected)
-        GroupName(1,:) char
+        GroupName(1,1) string
     end
     properties (SetAccess = protected, Hidden)
         requiredOptions(1,:) cell
@@ -45,7 +45,16 @@ classdef (Abstract) FeatureGroup < matlab.mixin.Heterogeneous
     
     methods (Static, Sealed, Access = protected)
         function default_object = getDefaultScalarElement
-            default_object = BasicProps;
+            default_object = EmptyFeature;
+        end
+    end
+    
+    methods (Sealed)
+        function tf = isempty(obj)
+            tf = false(size(obj));
+            for i = 1:numel(obj) 
+                tf(i) = isa(obj(i),'EmptyFeature');
+            end
         end
     end
 end
