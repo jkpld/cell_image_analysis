@@ -1,8 +1,8 @@
 classdef FeatureExtractor
     properties
-        objectPartioner ObjectPartioner = None
+        objectPartioner ObjectPartitioner = None
         featureGroups(1,:) FeatureGroup
-        channels(1,:) cell
+        channels(1,:) string
     end
     
     methods
@@ -33,22 +33,41 @@ classdef FeatureExtractor
             end
             
             % Create label matrix
-            L = bwlabel(mask);
+            L = single(bwlabel(mask));
             
-            % Extract features and feature names.
-            x = [];
-            names = [];
-            
-            for i = 1:numel(obj.featureGroups)
-                ch = find(strcmp(obj.channels, obj.featureGroups(i).Channel));
-                if isempty(ch)
-                    xi = obj.featureGroups(i).Compute([], L);
-                else
-                    xi = obj.featureGroups(i).Compute(I(:,:,ch), L);
-                end
-                x = [x, xi];
-                names = [names, obj.featureGroups(i).FeatureNames];
+            if isinteger(I)
+                I = single(I)/single(intmax(class(I)));
+            else
+                I = single(I);
             end
+            
+            % Remove empty groups
+            validChannels = ["", obj.channels];
+            groups = obj.featureGroups(~isempty(obj.featureGroups) & ismember([obj.featureGroups.Channel],validChannels));
+            
+            % Get feature names
+            names = {groups.FeatureNames};
+            num_xi = cellfun(@numel, names);
+            
+            % Initialize feature array
+            x = zeros(max(L(:)), sum(num_xi), 'single');
+
+            % feature end indices
+            num_xi = cumsum([0,num_xi]);
+
+            
+            for i = 1:numel(groups)
+                ch = obj.channels == groups(i).Channel;
+                if ~any(ch)
+                    xi = groups(i).Compute([], L);
+                else
+                    xi = groups(i).Compute(I(:,:,ch), L);
+                end
+
+                x(:, num_xi(i)+1:num_xi(i+1)) = xi;
+            end
+            
+            names = cat(2,names{:});
         end
     end 
 end
