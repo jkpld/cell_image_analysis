@@ -66,7 +66,7 @@ classdef Location < FeatureGroup
             useGPU = obj.Options.Use_GPU;
             
             % Initialize linear indices
-            linIdx = single(1:numel(L))';
+            linIdx = (single(1):single(numel(L)))';
             
             % Get number of rows in image
             nRow = size(L,1);
@@ -89,15 +89,20 @@ classdef Location < FeatureGroup
             r = rem(linIdx-1, nRow) + 1;
             c = (linIdx - r)/nRow + 1; clear linIdx nRow;
             
-            x = gpuArray.zeros(N_obj, 6, 'single');
-            
-            % Pixels per object
             if useGPU
+                % Pixels per object
                 N = accumarray(L, gpuArray.ones(size(L),'single'), [N_obj, 1], @sum, single(1));
+                
+                % Initialize features array
+                x = gpuArray.zeros(N_obj, 6, 'single');
             else
+                % Pixels per object
                 % Using sparse on CPU is faster than accumarray
                 N = single(full(sparse(double(L),ones(size(L)), ones(size(L)), double(N_obj), 1)));
                 N(N==0) = 1;
+                
+                % Initialize features array
+                x = zeros(N_obj, 6, 'single');
             end
             
             % Centroids
@@ -105,10 +110,10 @@ classdef Location < FeatureGroup
             x(:,2) = accumarray(L, r) ./ N; clear N;
             
             % Bounding Box
-            minC = accumarray(L, c, @min);
-            maxC = accumarray(L, c, @max); clear c;
-            minR = accumarray(L, r, @min);
-            maxR = accumarray(L, r, @max);
+            minC = accumarray(L, c, [N_obj, 1], @min);
+            maxC = accumarray(L, c, [N_obj, 1], @max); clear c;
+            minR = accumarray(L, r, [N_obj, 1], @min);
+            maxR = accumarray(L, r, [N_obj, 1], @max);
             
             x(:,3) = minC; % left corner
             x(:,4) = minR; % top corner

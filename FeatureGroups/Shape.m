@@ -121,6 +121,7 @@ classdef Shape < FeatureGroup
             % Object Boundaries
             %
             B = bwboundariesmex(double(L), 8);
+%             B = bwboundaries(double(L), 8, 'noholes');
             
             % ===========================================================
             % Fourier Descriptors
@@ -138,7 +139,7 @@ classdef Shape < FeatureGroup
             %   take that long.
             
             % Initialize linear indices
-            linIdx = single(1:numel(L))';
+            linIdx = (single(1):single(numel(L))).';
             
             % Get number of rows in image
             nRow = size(L,1);
@@ -171,8 +172,8 @@ classdef Shape < FeatureGroup
             end
             
             % Centroids
-            x_mu = accumarray(L, x) ./ N;
-            y_mu = accumarray(L, y) ./ N;
+            x_mu = accumarray(L, x, [N_obj, 1]) ./ N;
+            y_mu = accumarray(L, y, [N_obj, 1]) ./ N;
 
             
             % ===========================================================
@@ -182,9 +183,9 @@ classdef Shape < FeatureGroup
             x = x - x_mu(L); clear x_mu
             y = y - y_mu(L); clear y_mu
             
-            uxx = accumarray(L, x.^2) ./ N + 1/12;
-            uyy = accumarray(L, y.^2) ./ N + 1/12;
-            uxy = accumarray(L, x.*y) ./ N; clear x y
+            uxx = accumarray(L, x.^2, [N_obj, 1]) ./ N + 1/12;
+            uyy = accumarray(L, y.^2, [N_obj, 1]) ./ N + 1/12;
+            uxy = accumarray(L, x.*y, [N_obj, 1]) ./ N; clear x y
             
             tmp1 = sqrt( (uxx - uyy).^2 + 4*uxy.^2 ); clear uxy
             tmp2 = uxx + uyy; clear uxx uyy

@@ -78,14 +78,14 @@ classdef HaralickTexture < FeatureGroup
             
             NL = 8; % Use 8 levels.
             
-            L = cast(L,'like',I); % Make L the same class as I
-            numObjs = max(L(:)); % Number of objects
+            L = single(L); % Make L the same class as I
+            N_obj = max(L(:)); % Number of objects
             
             % Direction offsets
             offsets = [0, -1, -1, -1; 1, 1, 0, -1];
             offsets = reshape(offsets.*permute(D,[3,2,1]),2,4*N_D)';
             
-            x = zeros(numObjs,13*N_D); % Initialize features matrix
+            x = zeros(N_obj,13*N_D); % Initialize features matrix
             
             % If using GPU, then send the arrays to the GPU
             if useGPU
@@ -97,14 +97,18 @@ classdef HaralickTexture < FeatureGroup
             % Compute the per object min and max to scale the intensity
             % levels
             BG = L==0; % background mask
-            nBG = ~BG; % forground mask
-            Lf = L(nBG); % forground labels
-            If = I(nBG); % forground image
-            objMin = accumarray(Lf,If,[numObjs,1],@min); % object min
-            objMax = accumarray(Lf,If,[numObjs,1],@max) + 1e-6; % object max : this small offset ensures we do not have any NL+1 values after scaling (below in the for-loop)
-            objRange = objMax - objMin; % object range
+            FG = ~BG; % forground mask
+            Lf = L(FG); % forground labels
+            If = I(FG); clear FG; % forground image
             
-            L(BG) = NaN; % Set all non object pixels to NaN
+            objMin = [single(0); accumarray(Lf,If,[N_obj,1],@min)]; 
+            objMax = [single(1); accumarray(Lf,If,[N_obj,1],@max) + 1e-6]; clear If Lf; % this small offset ensures we do not have any NL+1 values after scaling (below in the for-loop)
+            objRange = objMax - objMin; clear objMax;
+            
+            % Scale intensities of each object to be in the range [1,NL].
+            I = floor(NL*(I - objMin(L+1))./objRange(L+1) + 1); clear objMin objRange
+            
+            L(BG) = NaN; clear BG; % Set all non object pixels to NaN
             
             % Pad the arrays for circular shifting
             maxD = max(D);
@@ -121,18 +125,14 @@ classdef HaralickTexture < FeatureGroup
                 L2 = circshift(L,offsets(i,:));
                 
                 % Find the valid overlap regions
-                valid = L==L2;
+                valid = find(L==L2); % find() is much faster than the logical alternative.
                 
                 % Get the intensities and object number for the valid
                 % region
                 Inds = [I(valid), I2(valid), L(valid)];
                 
-                % Scale the intensities (per object) to be in the range
-                % [1,NL]
-                Inds(:,1:2) = floor(NL*(Inds(:,1:2)-objMin(Inds(:,3)))./objRange(Inds(:,3)) + 1);
-                
                 % Compute the GLCM for each object
-                GLCM = accumarray(Inds, 1, [NL, NL, numObjs]);
+                GLCM = accumarray(Inds, 1, [NL, NL, N_obj]);
                 
                 % Make the GLCM symmetric
                 GLCM = GLCM + permute(GLCM,[2,1,3]);

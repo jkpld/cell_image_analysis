@@ -135,8 +135,15 @@ classdef Granularity < FeatureGroup
             end
             
             L = L(:);
-            FG = L>0;
+            FG = find(L>0); 
             L = L(FG);
+            % NOTE : Logical indexing is good if you do it once; however,
+            % when using the index multiple times, it is faster to directly
+            % compute the linear indices.            
+            % For example. In this program, if FG = L>0, (without the
+            % find()), then the program takes about 15% longer to run,
+            % which is 0.2 seconds (with an image ~4000 x 4000 with ~2300
+            % objects)
             
             % Compute granular spectrum
             
@@ -170,9 +177,7 @@ classdef Granularity < FeatureGroup
                 if Use_GPU
                     % If using a GPU then we need single arrays for
                     % accumarray.
-                    recS = single(rec);
-                    currentmean = accumarray(L,recS(FG),[N,1],@sum);
-                    clear recS
+                    currentmean = accumarray(L,single(rec(FG)),[N,1],@sum);
                 else
                     currentmean = accumarray(L,rec(FG),[N,1],@sum);
                 end

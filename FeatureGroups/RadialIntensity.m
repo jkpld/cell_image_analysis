@@ -91,11 +91,11 @@ classdef RadialIntensity < FeatureGroup
             useGPU = obj.Options.Use_GPU;
             
             BW = L>0; % compute binary mask
-            
+            BWi = find(BW);
             % Note: below I clear all variables that are no longer needed. This can be
             % helpful when working on a GPU.
-            I = single(I(BW));
-            L = single(L(BW));
+            I = single(I(BWi));
+            L = single(L(BWi));
             
             % Compute distance transform. This is used for computing the pixels in each
             % ring.
@@ -104,7 +104,7 @@ classdef RadialIntensity < FeatureGroup
             %    compute it on the CPU, even though this is much slower.
             %    TODO : Try to get the distance transform to work on the GPU.
             D_full = bwdist(~BW);
-            D = single(D_full(BW)); clear D_full;
+            D = single(D_full(BWi)); clear D_full;
             
             if useGPU
                 % If using gpu, then send over the arrays.
@@ -158,7 +158,7 @@ classdef RadialIntensity < FeatureGroup
                 N = accumarray(inds, gpuArray.ones(numel(vals),1,'single'), [N_obj, N_R], @sum, single(1));
             else
                 % N = accumarray(inds, ones(numel(vals),1,'single'), [N_obj, N_R], @sum, single(1));
-                N = single(full(sparse(single(inds(:,1)), single(inds(:,2)), ones(numel(vals),1), single(N_obj), N_R)));
+                N = single(full(sparse(double(inds(:,1)), double(inds(:,2)), ones(numel(vals),1), double(N_obj), N_R)));
                 N(N==0) = 1;
                 
                 % For some reason using sparse instead of accumarray here

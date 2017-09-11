@@ -36,8 +36,8 @@ classdef BasicProps < FeatureGroup
         
         function names = get.FeatureNames(obj)
             names = obj.GroupName + "_" + ...
-                ["Area", ...
-                 "Centroid_" + ["X","Y"], ...
+                ["Centroid_" + ["X","Y"], ...
+                 "Area", ...
                  "Intensity_" + obj.Channel + "_Integrated"];
         end
         
@@ -60,10 +60,10 @@ classdef BasicProps < FeatureGroup
             
             useGPU = obj.Options.Use_GPU;
             
-            FG = L~=0;
+            FG = find(L~=0);
             
             nRow = size(L,1);
-            linIdx = single(1:nmel(L))';
+            linIdx = (single(1):single(numel(L)))';
             
             I = single(I(FG));
             L = single(L(FG));
@@ -92,13 +92,13 @@ classdef BasicProps < FeatureGroup
             end
             
             % Centroids
-            x_mu = accumarray(L, x) ./ N;
-            y_mu = accumarray(L, y) ./ N;
+            x_mu = accumarray(L, x, [N_obj, 1]) ./ N; clear x
+            y_mu = accumarray(L, y, [N_obj, 1]) ./ N; clear y
             
             % Integrated intensity
-            S = accumarray(L, I, [N_obj, 1], @sum);
+            S = accumarray(L, I, [N_obj, 1], @sum); clear L I
             
-            x = [N, x_mu, y_mu, S];
+            x = [x_mu, y_mu, N, S];
             
             if useGPU
                 x = gather(x);

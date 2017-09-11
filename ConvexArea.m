@@ -10,19 +10,18 @@ function CHA = ConvexArea(B)
 %   CHA : convex area of object
 
 % Compute convex hull area
-K = convhull(B(:,1),B(:,2));
+try
+    K = convhull(B(:,1),B(:,2));
+catch 
+    CHA = 0;
+    return;
+end
+
 hull = B(K,:);
 
-minCorner = min(B);
-maxCorner = max(B);
-Bbox = [minCorner, (maxCorner-minCorner) + 1];
-
-y = hull(:,2) - Bbox(2) + 1;
-x = hull(:,1) - Bbox(1) + 1;
-M = Bbox(4);
-N = Bbox(3);
-
-convexImage = poly2mask(x,y,M,N);
-CHA = sum(convexImage(:));
+% Approximate the area of the shape in an image with the area of the
+% polygon describing the convex hull.
+siz = size(hull,1);
+CHA = abs(sum( (hull([2:siz, 1],1) - hull(:,1)) .* (hull([2:siz, 1],2) + hull(:,2)))/2); 
 
 end
