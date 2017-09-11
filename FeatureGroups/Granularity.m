@@ -50,14 +50,14 @@ classdef Granularity < FeatureGroup
             L = obj.Options.GranularSpectrumLength;
             ESz = obj.Options.ElementSize;
             BSSz = obj.Options.BackgroundSampleSize;
-            SSz = obj.SubSampleSize;
+            SSz = obj.Options.SubSampleSize;
             
-            featList = "ElSz" + string(ESz) + "_" + string(1:L);
+            featList = "E" + string(ESz) + "_" + string(1:L);
             if BSSz ~= 1
-                featList = "BckSz" + string(BSSz) + "_";
+                featList = "B" + string(BSSz) + "_";
             end
             if  SSz ~= 1
-                featList = "SmpSz" + string(SSz) + "_";
+                featList = "S" + string(SSz) + "_";
             end
             
             names = obj.GroupName + "_" + obj.Channel + "_" + featList;
