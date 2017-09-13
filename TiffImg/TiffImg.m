@@ -15,6 +15,8 @@ classdef TiffImg < handle
         
         Blur
         Threshold_After_Background(1,1) logical = false;
+        
+        Use_GPU(1,1) logical = false;
     end
     properties (SetAccess = private)
         FileName
