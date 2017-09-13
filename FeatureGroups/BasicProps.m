@@ -1,6 +1,6 @@
 classdef BasicProps < FeatureGroup
-    % BASICPROPS Compute the basic properties (centroid, integrated
-    % intensity, and area) for each object in an image
+    % BASICPROPS Compute the basic properties (centroid, area, and 
+    % integrated intensity) for each object in an image
     %
     % Properties :
     %
