@@ -31,6 +31,8 @@ classdef TiffImg < handle
         numBlcks
         xEdges
         yEdges
+        xCenters
+        yCenters
         tile_y_inds
         tile_x_inds
         blck_y_inds
@@ -99,7 +101,6 @@ classdef TiffImg < handle
             obj.numTiles = numTiles;
             
             obj.blockSize = max(obj.tileSize);
-
         end
         
         function set.blockSize(obj,blockSize)
@@ -107,6 +108,7 @@ classdef TiffImg < handle
                 blockSize = unique(round(blockSize./obj.tileSize).*obj.tileSize);
                 warning('blockSize adjusted to be multiple of image tile size. New block size is %d.', blockSize)
             end
+            
             obj.blockSize = blockSize;
             obj.tilesPerBlck = blockSize./obj.tileSize;
             obj.numBlcks = ceil(obj.imageSize/blockSize);
@@ -114,6 +116,9 @@ classdef TiffImg < handle
             obj.xEdges = [0:floor(obj.imageSize(2)/blockSize), obj.imageSize(2)/blockSize]*blockSize;
             obj.yEdges = [0:floor(obj.imageSize(1)/blockSize), obj.imageSize(1)/blockSize]*blockSize;
 
+            obj.xCenters = obj.xEdges(1:end-1) + diff(obj.xEdges)/2;
+            obj.yCenters = obj.yEdges(1:end-1) + diff(obj.yEdges)/2;
+            
             obj.tile_y_inds = 1:obj.tileSize(1);
             obj.tile_x_inds = 1:obj.tileSize(2);
             obj.blck_y_inds = 1:obj.tilesPerBlck(1);
