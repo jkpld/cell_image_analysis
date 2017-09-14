@@ -1,9 +1,6 @@
 classdef TiffImg < handle
     properties
         blockSize(1,1) double
-        
-
-
         Use_GPU(1,1) logical = false;
         Verbose(1,1) logical = false;
 
@@ -19,17 +16,17 @@ classdef TiffImg < handle
     properties (SetAccess = private)
         threshold = []
 
-        Background = []
-        Background_smooth = []
-        Background_stripe = []
-        Background_mean = []
+        BG_smooth = []
+        BG_Xstripe = []
 
-        Foreground = []
-        Foreground_smooth = []
-        Foreground_stripe = []
-        Foreground_mean = []
+        FG_smooth = []
+        FG_stripe = []
 
         Sharpness = []
+    end
+    properties (Dependent)
+        BackgroundEvalFun(1,1) function_handle
+        ForegroundEvalFun(1,1) function_handle
     end
     properties (SetAccess = private)
         FileName
@@ -56,16 +53,6 @@ classdef TiffImg < handle
     end
     properties (Access = private, Hidden)
         threshold_fun = []
-        BG_fun = []
-        BG_smooth_fun = []
-        BG_stripe_fun = []
-        BG_mean = []
-
-        FG_fun = []
-        FG_smooth_fun = []
-        FG_stripe_fun = []
-        FG_mean = []
-
         Threshold_After_Background(1,1) logical = false;
     end
 
@@ -239,38 +226,81 @@ classdef TiffImg < handle
         th = Compute_Threshold(obj, removeBackgroundFirst);
         bg = Compute_Background(obj);
         fg = Compute_Foreground(obj);
+        st = Compute_StripeArtifact(obj, BG_or_FG)
         sh = Compute_Sharpness(obj);
 
+        function fun = get.BackgroundEvalFun(obj)
+            fun = generateFunction(obj, obj.Background_smooth, obj.Background_Xstripe, true);
+        end
+
+        function fun = get.ForegroundEvalFun(obj)
+            fun = generateFunction(obj, obj.Foreground_smooth, obj.Foreground_Xstripe, true);
+        end
     end
 
     methods (Access = private)
-        
-        function fun = generateFunction(obj, z, x_stripe, const)
-            % Create a function handel that can be used to evaluate
-            % f(x,y) =  z(x,y) + z_stripe(x) + const
-            z = double(z); % The fast interpolation function used requires double
-            
-            if (nargin < 4) || isempty(const)
-                const = 0;
+
+        function fun = generateFunction(obj, z_smooth, x_stripe, meanOffset)
+            % Create a function handle that can be used to evaluate
+            % f(x,y) =  z_smooth(x,y) + x_stripe(x)
+            %
+            % If meanOffset is true, then the mean of z(x,y) will be
+            % subracted away.
+
+
+            if (nargin < 3)
+                x_stripe = [];
             end
-            
-            const = double(const); % Ensure double
-            
-            if (nargin < 3) || isempty(x_stripe)
-                fun = @(x,y) cast(const + ...
-                    interp2mex(z, (x - obj.xCenters(1))/obj.blockSize, (y - obj.yCenters(1))/obj.blockSize), ...
-                    obj.imageClass); % cast final result to same class as image
+
+            if isempty(z_smooth)
+                % Just have to evaluate the stripe
+                if isempty(x_stripe)
+                    warning('generateFunction:noInput','There is nothing to create a function from. First compute a surface (threshold, background, foreground, ...)');
+                    fun = @(~,~) 0;
+                    return;
+                end
+
+                fun = @(x,~) x_stripe(x);
+                return;
             else
-                x_stripe = double(x_stripe); % Ensure double
-                
-                fun = @(x,y) cast(const + x_stripe(x) + ...
-                    interp2mex(z, (x - obj.xCenters(1))/obj.blockSize, (y - obj.yCenters(1))/obj.blockSize), ...
-                    obj.imageClass); % cast final result to same class as image
+
+                if (nargin < 4)
+                    meanOffset = false;
+                end
+
+                if isstruct(z_smooth)
+                    x0 = z_smooth.x(1);
+                    y0 = z_smooth.y(1);
+                    d = z_smooth.x(2) - z_smooth.x(1); % block size
+                    z_smooth = z_smooth.Z;
+                else
+                    x0 = obj.xCenters(1);
+                    y0 = obj.yCenters(1);
+                    d = obj.blockSize;
+                end
+
+                z_smooth = double(z_smooth); % The fast interpolation function used requires double
+
+                if meanOffset
+                    z_smooth = z_smooth - mean(z_smooth(:));
+                end
+
+                if isempty(x_stripe)
+                    fun = @(x,y) cast(...
+                        interp2mex(z_smooth, (x - x0)/d, (y - y0)/d), ...
+                        obj.imageClass); % cast final result to same class as image
+                else
+                    x_stripe = double(x_stripe); % Ensure double
+
+                    fun = @(x,y) cast(...
+                        x_stripe(x) + interp2mex(z_smooth, (x - x0)/d, (y - y0)/d), ...
+                        obj.imageClass); % cast final result to same class as image
+                end
             end
-            
-            % This only performs nearest neighbor extrapolation outside of
-            % the defined limits. Therefore, the half blockSize on the
-            % image boarder could have jagged edges.
+
+            % Note: interp2mex only performs nearest neighbor extrapolation
+            % outside of the defined limits. Therefore, the half blockSize
+            % on the image boarder could have jagged edges.
             %
             % This will only be approximately correct on the right and
             % bottom edges of the image because the size of the right and
