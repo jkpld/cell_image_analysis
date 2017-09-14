@@ -26,7 +26,10 @@ if isempty(tiffImg.threshold_fun)
 end
 
 try
-    hasBackground = ~isempty(tiffImg.BG_fun);
+    hasBackground = ~isempty(tiffImg.BG_smooth);
+    if hasBackground
+        BG_fun = tiffImg.BackgroundEvalFun;
+    end
     
     if tiffImg.Verbose
         fprintf('Starting foreground calculation...\n');
@@ -63,35 +66,17 @@ try
             % - erode the foreground mask so that it is farther away from
             % the background
             if hasBackground
-                BG = tiffImg.BG_fun(x,y);
+                BG = BG_fun(x,y);
                 
-                % The below code is long, but it reduces the amount of
-                % memory used by the GPU.
                 if tiffImg.Threshold_After_Background
-                    if tiffImg.Use_GPU
-                        BG = gpuArray(BG);
-                    end
-                    Is = Is - BG; clear BG
-                    if tiffImg.Use_GPU
-                        threshold = gpuArray(threshold);
-                    end
-                    BW = imerode(Is > threshold, seD2); clear threshold
+                    Is = Is - BG;
+                    BW = imerode(Is > threshold, seD2);
                 else
-                    if tiffImg.Use_GPU
-                        threshold = gpuArray(threshold);
-                    end
-                    BW = imerode(Is > threshold, seD2); clear threshold
-
-                    if tiffImg.Use_GPU
-                        BG = gpuArray(BG);
-                    end
-                    Is = Is - BG; clear BG
+                    BW = imerode(Is > threshold, seD2);
+                    Is = Is - BG;
                 end
             else
-                if tiffImg.Use_GPU
-                    threshold = gpuArray(threshold);
-                end
-                BW = imerode(Is > threshold, seD2); clear threshold
+                BW = imerode(Is > threshold, seD2);
             end
             
             % Get the median background intensity
@@ -110,17 +95,9 @@ try
     
     % Smooth the foreground surface
     FG = smoothSurface(tiffImg, FG);
-    meanFG = mean(FG(:));
     
     % Save output for later reference
-    tiffImg.Foreground_smooth = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',FG);
-    tiffImg.Foreground_mean = meanFG;
-    
-    % Create function for internally evaluating the foreground in other
-    % functions.
-    tiffImg.FG_smooth_fun = generateFunction(tiffImg, FG);
-    tiffImg.FG_mean = meanFG;
-    tiffImg.FG_fun = generateFunction(tiffImg, FG, [], -meanFG);
+    tiffImg.FG_smooth = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',FG);
     
     if tiffImg.Verbose
         fprintf('Foreground calculation finished.\n');

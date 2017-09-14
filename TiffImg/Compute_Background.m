@@ -1,4 +1,4 @@
-function bg = Compute_Background(tiffImg)
+function bg = Compute_Background(tiffImg, removeXStripeArtifact)
 % COMPUTE_BACKGROUND Compute the image background in each block of the
 % image.
 %
@@ -103,17 +103,9 @@ try
     
     % Smooth the background surface
     BG = smoothSurface(tiffImg, BG);
-    meanBG = mean(BG(:));
     
-    % Save output for later reference
-    tiffImg.Background_smooth = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',BG);
-    tiffImg.Background_mean = meanBG;
-    
-    % Create function for internally evaluating the background in other
-    % functions.
-    tiffImg.BG_smooth_fun = generateFunction(tiffImg, BG);
-    tiffImg.BG_mean = meanBG;
-    tiffImg.BG_fun = generateFunction(tiffImg, BG, [], -meanBG);
+    % Save background
+    tiffImg.BG_smooth = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',BG);
     
     if tiffImg.Verbose
         fprintf('Background calculation finished.\n');
