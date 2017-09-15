@@ -20,7 +20,7 @@ classdef TiffImg < handle
         BG_Xstripe = []
 
         FG_smooth = []
-        FG_stripe = []
+        FG_Xstripe = []
 
         Sharpness = []
     end
@@ -50,6 +50,8 @@ classdef TiffImg < handle
         tile_x_inds
         blck_y_inds
         blck_x_inds
+        
+        workingClass
     end
     properties (Access = private, Hidden)
         threshold_fun = []
@@ -110,6 +112,21 @@ classdef TiffImg < handle
 
             tmp = tifflib('readEncodedTile',obj.FileID,1);
             obj.imageClass = class(tmp);
+            
+            % Set the working class. Always work with a float type to have
+            % +- numbers. If image is integers less than 16 bit, (2
+            % bytes), then use single precision (4 bytes). If image is
+            % integers with more than 16 bits then use double.
+            % If the image is logical, then just use logical.
+            obj.workingClass = obj.imageClass;
+            
+            if isinteger(tmp)
+                if str2double(obj.imageClass(end-1:end)) > 16
+                    obj.workingClass = 'double';
+                else
+                    obj.workingClass = 'single';
+                end
+            end
 
             obj.imageSize = [tifflib('getField',obj.FileID,257), tifflib('getField',obj.FileID,256)];
             obj.tileSize = [tifflib('getField',obj.FileID,323), tifflib('getField',obj.FileID,322)];
@@ -163,6 +180,35 @@ classdef TiffImg < handle
             end
         end
 
+        function [I,x] = getColumn(obj, col_idx)
+            
+            % initialize array for image stripe
+            I = zeros(tiffImg.imageSize(1),tiffImg.tileSize(2),tiffImg.imageClass);
+        
+            % Read in image stripe
+            counter = 1;
+            obj.open()
+            for tile_y = obj.tiles(:,col_idx)'
+                tmp = tifflib('readEncodedTile',obj.FileID,tile_y);%readEncodedTile(t,cTiles(i));
+                [m,n] = size(tmp);
+                I(counter:counter+m-1, 1:n) = tmp;
+                counter = counter + m;
+            end
+            obj.close()
+            I(:,n+1:end) = [];
+            
+            % Convert image to working class.
+            if ~strcmp(obj.imageClass,'logical')
+                I = cast(I,obj.workingClass);
+                I = I / cast(obj.maxSampleValue,obj.workingClass);
+            end
+            
+            if nargout > 1
+                % Compute x pixels
+                x = (1:n) + (col_idx-1)*obj.tileSize(2);
+            end
+        end
+        
         function [I,x,y] = getBlock(obj,blck_x,blck_y)
             tmpB_x_inds = obj.blck_x_inds + (blck_x-1)*obj.tilesPerBlck(2);
             tmpB_y_inds = obj.blck_y_inds + (blck_y-1)*obj.tilesPerBlck(1);
@@ -183,10 +229,8 @@ classdef TiffImg < handle
             for t = 1:numel(cTiles)
 
                 [j,k] = ind2sub(szcTiles,t);
-                tmp = tifflib('readEncodedTile',obj.FileID,cTiles(t));%readEncodedTile(t,cTiles(i));
-                if t == 1
-                    I = zeros(obj.blockSize,obj.blockSize,'like',tmp);
-                end
+                
+                I = zeros(obj.blockSize,obj.blockSize,'like',obj.imageClass);
 
                 tmpT_y_inds = obj.tile_y_inds + (j-1)*obj.tileSize(1);
                 tmpT_x_inds = obj.tile_x_inds + (k-1)*obj.tileSize(2);
@@ -215,6 +259,12 @@ classdef TiffImg < handle
                 maxY = obj.blockSize+1;
             end
 
+            % Convert image to working class.
+            if ~strcmp(obj.imageClass,'logical')
+                I = cast(I,obj.workingClass);
+                I = I / cast(obj.maxSampleValue,obj.workingClass);
+            end
+            
             if nargout > 1
                 y = (1:(maxY-1)) + (blck_y-1)*obj.blockSize;
                 x = (1:(maxX-1)) + (blck_x-1)*obj.blockSize;
@@ -224,8 +274,8 @@ classdef TiffImg < handle
         % Functions defined externally
         Z = smoothSurface(obj,z,type);
         th = Compute_Threshold(obj, removeBackgroundFirst);
-        bg = Compute_Background(obj);
-        fg = Compute_Foreground(obj);
+        bg = Compute_Background(obj, computeXStripeArtifact);
+        fg = Compute_Foreground(obj, computeXStripeArtifact);
         st = Compute_StripeArtifact(obj, BG_or_FG)
         sh = Compute_Sharpness(obj);
 
@@ -247,6 +297,9 @@ classdef TiffImg < handle
             % If meanOffset is true, then the mean of z(x,y) will be
             % subracted away.
 
+            
+            outClass = obj.workingClass;
+            
 
             if (nargin < 3)
                 x_stripe = [];
@@ -288,13 +341,13 @@ classdef TiffImg < handle
                 if isempty(x_stripe)
                     fun = @(x,y) cast(...
                         interp2mex(z_smooth, (x - x0)/d, (y - y0)/d), ...
-                        obj.imageClass); % cast final result to same class as image
+                        outClass); % cast final result to same class as image
                 else
                     x_stripe = double(x_stripe); % Ensure double
 
                     fun = @(x,y) cast(...
                         x_stripe(x) + interp2mex(z_smooth, (x - x0)/d, (y - y0)/d), ...
-                        obj.imageClass); % cast final result to same class as image
+                        outClass); % cast final result to same class as image
                 end
             end
 
@@ -308,5 +361,9 @@ classdef TiffImg < handle
             % to blocks that are not full.
 
         end
+    end
+    
+    methods (Static)
+        th = otsuthresh_scale(I,scale);
     end
 end % class
