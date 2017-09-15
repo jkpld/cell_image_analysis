@@ -280,11 +280,11 @@ classdef TiffImg < handle
         sh = Compute_Sharpness(obj);
 
         function fun = get.BackgroundEvalFun(obj)
-            fun = generateFunction(obj, obj.Background_smooth, obj.Background_Xstripe, true);
+            fun = generateFunction(obj, obj.Background_smooth, obj.Background_Xstripe, false);
         end
 
         function fun = get.ForegroundEvalFun(obj)
-            fun = generateFunction(obj, obj.Foreground_smooth, obj.Foreground_Xstripe, true);
+            fun = generateFunction(obj, obj.Foreground_smooth, obj.Foreground_Xstripe, false);
         end
     end
 
