@@ -226,12 +226,13 @@ classdef TiffImg < handle
             maxX = 0;
             maxY = 0;
 
+            I = zeros(obj.blockSize,obj.blockSize,obj.imageClass);
+            
             for t = 1:numel(cTiles)
 
                 [j,k] = ind2sub(szcTiles,t);
-                
-                I = zeros(obj.blockSize,obj.blockSize,'like',obj.imageClass);
-
+                tmp = tifflib('readEncodedTile',obj.FileID,cTiles(t));
+    
                 tmpT_y_inds = obj.tile_y_inds + (j-1)*obj.tileSize(1);
                 tmpT_x_inds = obj.tile_x_inds + (k-1)*obj.tileSize(2);
 
