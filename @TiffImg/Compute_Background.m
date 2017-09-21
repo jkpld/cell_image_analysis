@@ -1,4 +1,4 @@
-function bg = Compute_Background(tiffImg, removeXStripeArtifact)
+function bg = Compute_Background(tiffImg, computeXStripeArtifact)
 % COMPUTE_BACKGROUND Compute the image background in each block of the
 % image.
 %
@@ -8,6 +8,9 @@ function bg = Compute_Background(tiffImg, removeXStripeArtifact)
 %   background : Matrix giving the smoothed background computed accross the
 %     image. Even if no output is requested the background is still stored
 %     to the tiffImg object.
+%   computeXStripeArtifact : logical flag. If true, then the x stripe
+%     artifact will be computed after computing the smoothed background.
+%     (Default false)
 %
 % Note : Computing the background requires that the image threshold has
 % already been calculated. The background is calculated by first
@@ -19,19 +22,19 @@ function bg = Compute_Background(tiffImg, removeXStripeArtifact)
 
 % James Kapaldo
 
+if nargin < 2
+    computeXStripeArtifact = false;
+end
+
 if isempty(tiffImg.threshold_fun)
     error('Compute_Background:noThreshold','The image threshold must be computed before computing the background.');
 end
 
-try
-    if tiffImg.Verbose
-        fprintf('Starting background calculation...\n');
-    end
-    
-    BG = zeros(tiffImg.numBlcks, obj.imageClass);
+try    
+    BG = zeros(tiffImg.numBlcks, tiffImg.workingClass);
     seD2 = strel('diamond',2);
     
-    progress = displayProgress(tiffImg.numBlcks(2),'number_of_displays', 15,'active',tiffImg.Verbose);
+    progress = displayProgress(tiffImg.numBlcks(2),'number_of_displays', 15,'active',tiffImg.Verbose, 'name', 'Computing background,');
     progress.start();
     
     % Iterate over x blocks
@@ -62,12 +65,14 @@ try
             BW = imerode(Is < threshold, seD2); clear threshold
             
             % Get the median background intensity
-            BGi = median(Is(BW)); clear Is BW
+            BGi = median(Is(BW),'omitnan'); clear Is BW
             
             if tiffImg.Use_GPU
                 BGi = gather(BGi);
             end
-            
+            if isnan(BGi)
+                BGi = 0;
+            end
             BG(blck_y,blck_x) = BGi;
             
             %             Th = thrsh_fun({y,xt});
@@ -102,13 +107,13 @@ try
     end % x block
     
     % Smooth the background surface
-    BG = smoothSurface(tiffImg, BG);
+    BG = smoothSurf(tiffImg, BG);
     
     % Save background
     tiffImg.BG_smooth = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',BG);
     
-    if tiffImg.Verbose
-        fprintf('Background calculation finished.\n');
+    if computeXStripeArtifact
+        Compute_StripeArtifact(tiffImg,'b');
     end
     
     % Output the background matrix if requested.
