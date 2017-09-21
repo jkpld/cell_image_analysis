@@ -13,7 +13,7 @@ classdef TiffImg < handle
         % foreground). If set to NaN, then smoothing will be disabled.
         Surface_Smoothing_Radius(1,1) double = NaN;
     end
-    properties (SetAccess = private)
+    properties %(SetAccess = private)
         threshold = []
 
         BG_smooth = []
@@ -24,10 +24,10 @@ classdef TiffImg < handle
 
         Sharpness = []
     end
-    properties (Dependent)
-        BackgroundEvalFun(1,1) function_handle
-        ForegroundEvalFun(1,1) function_handle
-    end
+%     properties (Dependent)
+%         BackgroundEvalFun(1,1) function_handle
+%         ForegroundEvalFun(1,1) function_handle
+%     end
     properties (SetAccess = private)
         FileName
         FileID
@@ -53,9 +53,10 @@ classdef TiffImg < handle
         
         workingClass
     end
-    properties (Access = private, Hidden)
+    properties (SetAccess = private)
         threshold_fun = []
         Threshold_After_Background(1,1) logical = false;
+        Threshold_After_Foreground(1,1) logical = false;
     end
 
     methods
@@ -183,7 +184,7 @@ classdef TiffImg < handle
         function [I,x] = getColumn(obj, col_idx)
             
             % initialize array for image stripe
-            I = zeros(tiffImg.imageSize(1),tiffImg.tileSize(2),tiffImg.imageClass);
+            I = zeros(obj.imageSize(1),obj.tileSize(2),obj.imageClass);
         
             % Read in image stripe
             counter = 1;
@@ -206,6 +207,35 @@ classdef TiffImg < handle
             if nargout > 1
                 % Compute x pixels
                 x = (1:n) + (col_idx-1)*obj.tileSize(2);
+            end
+        end
+        
+        function [I,y] = getRow(obj, row_idx)
+            
+            % initialize array for image stripe
+            I = zeros(obj.tileSize(1),obj.imageSize(2),obj.imageClass);
+        
+            % Read in image stripe
+            counter = 1;
+            obj.open()
+            for tile_y = obj.tiles(row_idx,:)
+                tmp = tifflib('readEncodedTile',obj.FileID,tile_y);%readEncodedTile(t,cTiles(i));
+                [m,n] = size(tmp);
+                I(1:m, counter:counter+n-1) = tmp;
+                counter = counter + n;
+            end
+            obj.close()
+            I(m+1:end,:) = [];
+            
+            % Convert image to working class.
+            if ~strcmp(obj.imageClass,'logical')
+                I = cast(I,obj.workingClass);
+                I = I / cast(obj.maxSampleValue,obj.workingClass);
+            end
+            
+            if nargout > 1
+                % Compute x pixels
+                y = (1:m).' + (row_idx-1)*obj.tileSize(1);
             end
         end
         
@@ -267,36 +297,124 @@ classdef TiffImg < handle
             end
             
             if nargout > 1
-                y = (1:(maxY-1)) + (blck_y-1)*obj.blockSize;
+                y = (1:(maxY-1)).' + (blck_y-1)*obj.blockSize;
                 x = (1:(maxX-1)) + (blck_x-1)*obj.blockSize;
             end
         end
 
         % Functions defined externally
-        Z = smoothSurface(obj,z,type);
-        th = Compute_Threshold(obj, removeBackgroundFirst);
+        Z = smoothSurf(obj,z,type);
+        th = Compute_Threshold(obj, removeBackgroundFirst, removeForegroundFirst);
         bg = Compute_Background(obj, computeXStripeArtifact);
         fg = Compute_Foreground(obj, computeXStripeArtifact);
         st = Compute_StripeArtifact(obj, BG_or_FG)
         sh = Compute_Sharpness(obj);
+        [x, x_names] = Measure_BasicProps(obj,channelName);
+        [flatteningSurface, Xstripe] = Compute_DAPI_Corrections(tiffImg,x,y,dapi)
 
-        function fun = get.BackgroundEvalFun(obj)
-            fun = generateFunction(obj, obj.Background_smooth, obj.Background_Xstripe, false);
-        end
+%         function fun = get.BackgroundEvalFun(obj)
+%             fun = generateFunction(obj, obj.BG_smooth, obj.BG_Xstripe, false);
+%         end
+% 
+%         function fun = get.ForegroundEvalFun(obj)
+%             fun = generateFunction(obj, obj.FG_smooth, obj.FG_Xstripe, false);
+%         end
+        
+        function fig = plot(obj,name)
+            % PLOT Plot one of the computed quantities.
+            %
+            % fig = tiffImg.plot(name)
+            %
+            % Input 
+            %   name : one of the following strings
+            %     'threshold'
+            %     'background'
+            %     'foreground'
+            %     'background_stripe'
+            %     'foreground_stripe'
+            
+            valid = {'threshold','background','foreground','stripe_background','stripe_foreground'};
+            internal_name = {'threshold','BG_smooth','FG_smooth','BG_Xstripe','FG_Xstripe'};
+            idx = find(strncmpi(name, valid, numel(name)));
 
-        function fun = get.ForegroundEvalFun(obj)
-            fun = generateFunction(obj, obj.Foreground_smooth, obj.Foreground_Xstripe, false);
+            if isempty(idx) || (numel(idx) > 1)
+                error('plot:unknownName','The "name" must be an unambigious match to one of the following: \n%s.', string(valid).join(', '))
+            else
+                name = internal_name{idx};
+                name_user = valid{idx};
+            end
+            
+            if isempty(obj.(name))
+                error('plot:undefinedSurface','The %s has not been computed yet. Please compute it before trying to plot it.', name_user);
+            end
+            
+            fg = figure('visible','off');
+            try
+                if idx > 3
+                    % Plot x stripe
+                    x = (1:obj.imageSize(2))*obj.mmPerPixel;
+                    y = obj.(name);
+                    plot(x,y,'Color','y','LineWidth',1)
+                    title(strrep(name_user,'_',' '))
+                    xlabel('x / mm')
+                    ylabel('intensity')
+                    axis tight
+                else
+                    % Plot surface
+                    x = obj.(name).x;
+                    y = obj.(name).y;
+                    Z = obj.(name).Z;
+
+                    if any(size(Z)==1) % need scattered surface
+%                         toRemove = x < 0 || x > obj.imageSize(2) || ...
+%                             y < 0 || y > obj.imageSize(1);
+%                         x(toRemove) = [];
+%                         y(toRemove) = [];
+%                         Z(toRemove) = [];
+                        tri = delaunay(x,y);
+                        trisurf(tri,x*obj.mmPerPixel,y*obj.mmPerPixel,Z);
+                    else
+                        surface(x*obj.mmPerPixel, y*obj.mmPerPixel, Z, 'EdgeColor', 'none');
+                    end
+                    title(name_user)
+                    xlabel('x / mm')
+                    ylabel('y / mm')
+                    zlabel('intensity')
+                    colorbar;
+                    axis tight
+                    try
+                        daspect([1,1,range(Z(:))/range(x*obj.mmPerPixel)])
+                    catch
+                    end
+                end
+                setTheme(fg,'dark')
+            catch ME
+                close(fg)
+                rethrow(ME)
+            end
+            fg.Visible = 'on';
+            if nargout > 0
+                fig = fg;
+            end
         end
     end
 
-    methods (Access = private)
+    methods %(Access = private)
 
-        function fun = generateFunction(obj, z_smooth, x_stripe, meanOffset)
+        function fun = generateFunction(obj, z_smooth, x_stripe, multiplyStripe)
             % Create a function handle that can be used to evaluate
             % f(x,y) =  z_smooth(x,y) + x_stripe(x)
             %
-            % If meanOffset is true, then the mean of z(x,y) will be
-            % subracted away.
+            % If multiplyStripe is true, then the the stripe will be
+            % multiplied by the smoothe surface
+            % f(x,y) = z_smooth(x,y) .* x_stripe(x)
+            %
+            % multiplyStripe is false be default
+            %
+            % This function will take in vectors and output a matrix!!
+            % x = [1 x m]
+            % y = [n x 1]
+            % f = [n x m]
 
             
             outClass = obj.workingClass;
@@ -319,52 +437,57 @@ classdef TiffImg < handle
             else
 
                 if (nargin < 4)
-                    meanOffset = false;
+                    multiplyStripe = false;
                 end
 
                 if isstruct(z_smooth)
-                    x0 = z_smooth.x(1);
-                    y0 = z_smooth.y(1);
-                    d = z_smooth.x(2) - z_smooth.x(1); % block size
-                    z_smooth = z_smooth.Z;
+                    if any(size(z_smooth.Z)==1) % assume data need scattered interpolant
+                        fun_scat = scatteredInterpolant(z_smooth.x,z_smooth.y,double(z_smooth.Z));
+                        smooth_fun = @(x,y) fun_scat({y,x});
+                    else % assume data is gridded
+                        xg = z_smooth.x(:);
+                        yg = z_smooth.y(:);
+                        
+                        z_smooth = double(z_smooth.Z);
+                        
+                        xn = (1:size(z_smooth,2)).';
+                        yn = (1:size(z_smooth,1)).';
+
+                        smooth_fun = @(x,y) interp2mex_wExpand(z_smooth, reshape(nakeinterp1(xg,xn,x(:)),size(x)), reshape(nakeinterp1(yg,yn,y(:)),size(y)));
+                    end
                 else
-                    x0 = obj.xCenters(1);
-                    y0 = obj.yCenters(1);
-                    d = obj.blockSize;
-                end
-
-                z_smooth = double(z_smooth); % The fast interpolation function used requires double
-
-                if meanOffset
-                    z_smooth = z_smooth - mean(z_smooth(:));
+                    xg = obj.xCenters(:);
+                    yg = obj.yCenters(:);
+                    xn = (1:size(z_smooth,2)).';
+                    yn = (1:size(z_smooth,1)).';
+                    
+                    z_smooth = double(z_smooth);
+                    
+                    smooth_fun = @(x,y) interp2mex_wExpand(z_smooth, reshape(nakeinterp1(xg,xn,x(:)),size(x)), reshape(nakeinterp1(yg,yn,y(:)),size(y)));
                 end
 
                 if isempty(x_stripe)
-                    fun = @(x,y) cast(...
-                        interp2mex(z_smooth, (x - x0)/d, (y - y0)/d), ...
-                        outClass); % cast final result to same class as image
+                    fun = @(x,y) cast( smooth_fun(x,y), outClass);
                 else
                     x_stripe = double(x_stripe); % Ensure double
-
-                    fun = @(x,y) cast(...
-                        x_stripe(x) + interp2mex(z_smooth, (x - x0)/d, (y - y0)/d), ...
-                        outClass); % cast final result to same class as image
+                    if multiplyStripe
+                        fun = @(x,y) cast( x_stripe(x) .* smooth_fun(x,y), outClass); % cast final result to same class as image
+                    else
+                        fun = @(x,y) cast( x_stripe(x) + smooth_fun(x,y), outClass); % cast final result to same class as image
+                    end
                 end
             end
 
             % Note: interp2mex only performs nearest neighbor extrapolation
             % outside of the defined limits. Therefore, the half blockSize
             % on the image boarder could have jagged edges.
-            %
-            % This will only be approximately correct on the right and
-            % bottom edges of the image because the size of the right and
-            % bottom pixels could be smaller than the rest of them -- due
-            % to blocks that are not full.
 
         end
     end
     
     methods (Static)
         th = otsuthresh_scale(I,scale);
+        [Z,X,Y] = smoothSurface(x,y,z,r,type);
+        [S,fun] = decimate_and_smooth(x,y,z,op);
     end
 end % class
