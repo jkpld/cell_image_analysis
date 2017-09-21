@@ -25,40 +25,21 @@ function st = Compute_StripeArtifact(tiffImg, BG_or_FG)
 [isBG, str, BG_fun, FG_fun] = parse_input(tiffImg, BG_or_FG);
 
 try
-    if tiffImg.Verbose
-        fprintf('Starting %s stripe calculation...\n', str);
-    end
-    
-    stripe = zeros(1, tiffImg.imageSize(2), obj.imageClass);
-    y = 1:tiffObj.imageSize(1);
+    stripe = zeros(1, tiffImg.imageSize(2), tiffImg.workingClass);
+    y = (1:tiffImg.imageSize(1)).';
     seD2 = strel('diamond',2);
     
-    progress = displayProgress(tiffImg.numTiles(2),'number_of_displays', 15,'active',tiffImg.Verbose);
+    progress = displayProgress(tiffImg.numTiles(2),'number_of_displays', 15,'active',tiffImg.Verbose, 'name',['Computing ', str, ' stripe,']);
     progress.start();
     
-    for row_x = 1:tiffObj.numTiles(2)
+    for col_x = 1:tiffImg.numTiles(2)
 
-        % initialize array for image stripe
-        I = zeros(tiffObj.imageSize(1),tiffObj.tileSize(2),tiffImg.imageClass);
-        
-        % Read in image stripe
-        counter = 1;
-        tiffObj.open()
-        for tile_y = tiffObj.tiles(:,row_x)'
-            tmp = tifflib('readEncodedTile',tiffObj.FileID,tile_y);%readEncodedTile(t,cTiles(i));
-            [m,n] = size(tmp);
-            I(counter:counter+m-1, 1:n) = tmp;
-            counter = counter + m;
-        end
-        tiffObj.close()
-        I(:,n+1:end) = [];
-        
-        % Compute x pixels
-        x = (1:size(I,2)) + (row_x-1)*tiffObj.tileSize(2);
+        % Get column
+        [I,x] = getColumn(tiffImg, col_x);
                 
         % Get threshold for slice
         threshold = tiffImg.threshold_fun(x,y);
-        
+
         if tiffImg.Use_GPU
             I = gpuArray(I);
         end
@@ -68,26 +49,34 @@ try
 
         % Remove background before thresholding if supposed to
         if tiffImg.Threshold_After_Background
-            Is = Is - BG_fun(x,y);
+            Ist = Is - BG_fun(x,y);
+        else
+            Ist = Is;
         end
         
         % Get background/foreground object mask
         % If computing the background stripe than we want to NaN out the
         % foreground, and vise-versa.
         if isBG
-            BW = imdilate(Is > threshold, seD2); 
+            BW = imdilate(Ist > threshold, seD2); 
         else
-            BW = imdilate(Is < threshold, seD2); 
+            BW = imdilate(Ist < threshold, seD2); 
         end
         
         % Remove background after thresholding if supposed to
-        if ~tiffImg.Threshold_After_Background
-            Is = Is - BG_fun(x,y);
-        end
+%         if ~tiffImg.Threshold_After_Background
+%             Is = Is - BG_fun(x,y);
+%         end
         
         % Remove foreground if computing foreground stripe
-        if ~isBG
-            Is = Is - FG_fun(x,y);
+        if isBG
+            Is = Is ./ BG_fun(x,y);
+        else
+            if ~tiffImg.Threshold_After_Background
+                Is = Is - BG_fun(x,y);
+            end
+
+            Is = Is ./ FG_fun(x,y);
         end
         
         Is(BW) = nan; clear BW
@@ -104,13 +93,9 @@ try
     
     % Save stripe
     if isBG
-        tiffImg.BG_stripe = stripe;
+        tiffImg.BG_Xstripe = stripe;
     else
-        tiffImg.FG_stripe = stripe;
-    end
-    
-    if tiffImg.Verbose
-        fprintf('%s stripe calculation finished.\n',str);
+        tiffImg.FG_Xstripe = stripe;
     end
     
     % Output the stripe if requested.
@@ -139,10 +124,11 @@ if isempty(tiffImg.threshold_fun)
 end
 
 idx = find(strncmpi(BG_or_FG,{'background','foreground'},numel(BG_or_FG)));
+
 if numel(idx) > 1
     error('Compute_StripeArtifact:ambigiousInput','The BG_or_FG string input must be an unambigious match to either "background" or "foreground".');
 else
-    BGstripe = idx == 0;
+    BGstripe = idx == 1;
 end
 
 if BGstripe
@@ -158,15 +144,17 @@ end
 if BGstripe
     str = 'background';
     % If computing bacgkround stripe, then we need a function to evaluate
-    % the smooth background.
+    % the smooth background. This will automatically offset the surface by
+    % the surface mean.
     BG_fun = generateFunction(tiffImg,tiffImg.BG_smooth);
     FG_fun = [];
 else
     str = 'foreground';
     % If computing the foreground stripe, then we need a function to
-    % evaluate the full background (if any)
+    % evaluate the full background (if any). This will automatically offset
+    % the surface by the surface mean.
     if ~isempty(tiffImg.BG_smooth)
-        BG_fun = tiffImg.BackgroundEvalFun;
+        BG_fun = generateFunction(tiffImg,tiffImg.BG_smooth,tiffImg.BG_Xstripe,true);
     else
         BG_fun = @(~,~) 0;
     end
