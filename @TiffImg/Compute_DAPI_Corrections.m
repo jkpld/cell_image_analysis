@@ -1,36 +1,41 @@
-function [flatteningSurface, Xstripe] = Compute_DAPI_Corrections(tiffImg,x,y,dapi)
+function [flatteningSurface, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(tiffImg,x,y,dapi,area,options)
 % COMPUTE_DAPI_CORRECTIONS Compute the smooth surface and X stripe artifact
 % such that when the DAPI data is divided by both of these corrections the
 % G1 and G2 bands are both flat and located at 1 and 2, respectively, and
 % there is not stripe artifact along the x direction.
 %
-% [flatteningSurface, Xstripe] = Compute_DAPI_Corrections(x,y,dapi,mmPerPixel)
+% [flatteningSurface, Xstripe, G1_areaNorm, G1_idx] = Compute_DAPI_Corrections(x,y,dapi,mmPerPixel)
 %
 % Input 
 %   x : spatial x data [pixels]
 %   y : spatial y data [pixels]
 %   dapi : integrated dapi intensity for each object
+%   area : area of each object
+%   options : (options) structure with options for decimate_smooth()
 %
 % Output
-%   flatteningSurface : struct with fields X, Y, and Z. The smooth surface
+%   flatteningSurface : struct with fields x, y, and Z. The smooth surface
 %     that, when the dapi data is divided by, positions the G1 and G2 bands
-%     in the correct positions. The fields of this structure can be passed
-%     to scatteredInterpolant() to evaluate the surface at all points.
+%     in the correct positions.
 %   Xstripe : The X stripe artifact (1 x imageSize(2)) that, when the dapi
 %     data is divided by, removes the x stripe artifact from the dapi data.
+%   G1Area : struct with fields x, y, and Z. The smooth surface that gives
+%     the G1 area.
+%   G1_idx : Logical index array giving the G1 nuclei of the input data.
 
 % James Kapaldo
 
-options = struct( ...
-    'reductionMethod', 'mode', ...
-    'gridType', 'hexagonal', ...
-    'cleanHexagonData', true, ...
-    'binSize', [1.5/tiffImg.mmPerPixel,1], ...
-    'smoothingRadius',4/tiffImg.mmPerPixel, ...
-    'defaultValue',1);
+if nargin < 6
+    options = struct( ...
+        'reductionMethod', 'mode', ...
+        'gridType', 'hexagonal', ...
+        'cleanHexagonData', true, ...
+        'binSize', [1.5/tiffImg.mmPerPixel,1], ...
+        'smoothingRadius',4/tiffImg.mmPerPixel, ...
+        'defaultValue',1);
+end
 
-
-DEBUG = 1;
+DEBUG = 0;
 
 % Initial correction. ----------------------------------------------------
 
@@ -82,10 +87,9 @@ dapi_c = dapi_c ./ (DAPI_G2_mode(x,y)/2); % dapi_c = ((dapi_c-1) ./ (DAPI_G2_mod
 
 idx = dapi_c>1.7 & dapi_c<2.3;
 G2_stripe = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',2);
+dapi_c = dapi_c ./ (interp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x(:,1))/2);
 
 if DEBUG
-    dapi_c = dapi_c ./ (interp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x(:,1))/2);
-
     figure
     line(x,y,dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
     title('Data after correction')
@@ -123,6 +127,27 @@ Z = fun({yg,xg})';
 flatteningSurface.Z = Z;
 flatteningSurface.x = xg;
 flatteningSurface.y = yg;
+
+% Compute the G1 area surface --------------------------------------------
+if nargout > 2
+    idx = dapi_c > 0.7 & dapi_c < 1.3;
+    options.defaultValue = nan;
+    options.binSize = [2.5/tiffImg.mmPerPixel,1];
+    options.smoothingRadius = 6/tiffImg.mmPerPixel;
+    G1_area  = TiffImg.decimate_and_smooth(x(idx), y(idx), area(idx), options);
+    
+    % interpolate onto the same square grid as the threshold
+    fun = scatteredInterpolant(G1_area.X, G1_area.Y, G1_area.Z);
+    Z = fun({yg,xg})';
+    
+    G1Area.Z = Z;
+    G1Area.x = xg;
+    G1Area.y = yg;
+end
+
+if nargout > 3
+    G1_idx = idx;
+end
 
 if DEBUG
     tmp = @(x,y) interp2mex(Z, nakeinterp1(xg(:),(1:size(Z,2))',x), nakeinterp1(yg(:),(1:size(Z,1))',y));%griddedInterpolant({yg,xg},Z,'linear','nearest');%
