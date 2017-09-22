@@ -46,6 +46,10 @@ try
     foregroundFirst = hasForeground && tiffImg.Threshold_After_Background;
     foregroundAfter = hasForeground && ~tiffImg.Threshold_After_Background;
     
+    if backgroundFirst && foregroundFirst
+        threshold = median(tiffImg.threshold.Z(:));
+    end
+    
     % Basic props measurer
     bp = BasicProps(channelName,struct('Use_GPU',tiffImg.Use_GPU));
     
@@ -70,8 +74,9 @@ try
             [I,x,y] = getBlock(tiffImg,blck_x,blck_y);
             
             % Get threshold for block.
-            threshold = tiffImg.threshold_fun(x,y);
-            
+            if ~backgroundFirst || ~foregroundFirst
+                threshold = tiffImg.threshold_fun(x,y);
+            end
 
             if tiffImg.Use_GPU
                 I = gpuArray(I);
@@ -79,12 +84,6 @@ try
             
             % Smooth image
             Is = imfilter(I, tiffImg.Image_Smooth_Kernel, 'symmetric'); clear I
-            
-%             if tiffImg.Use_GPU
-%                 I = gather(Is); clear Is
-%             else
-%                 I = Is; clear Is
-%             end
             
             % Get the foreground mask
             % - erode the foreground mask so that it is farther away from
