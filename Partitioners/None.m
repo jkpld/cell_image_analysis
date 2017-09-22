@@ -1,9 +1,4 @@
 classdef None < ObjectPartitioner
-    methods (Static)
-        function trueFalse = attemptPartitioning(objInfo)
-            trueFalse = true(size(objInfo,1),1);
-        end
-    end
     methods
         function obj = None()
         end
