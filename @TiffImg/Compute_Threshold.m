@@ -52,7 +52,6 @@ try
             
             % Read in image block
             [I,x,y] = getBlock(tiffImg, blck_x, blck_y);
-            
 
             % Filter image
             if tiffImg.Use_GPU
@@ -63,9 +62,6 @@ try
                 I = imfilter(I,tiffImg.Image_Smooth_Kernel,'symmetric');
             end
             
-%             figure
-%             imshow(I,[])
-            
             % Remove background
             if removeBackgroundFirst
                 I = I - BG_fun(x,y);
@@ -73,15 +69,11 @@ try
             if removeForegroundFirst
                 I = I ./ FG_fun(x,y);
             end
-            
-%             figure
-%             imshow(I,[])
-%             tiffImg.close()
-%             error('some error')
+
             % Compute threshold
-            if any(I(:)>1)
-                fprintf('larger than 1!\n')
-            end
+%             if any(I(:)>1)
+%                 fprintf('larger than 1!\n')
+%             end
             threshold(blck_y,blck_x) = tiffImg.otsuthresh_scale(I,'log');
         end % y block
         
@@ -106,10 +98,6 @@ try
     % threshold after the background correction and foreground correction.
     tiffImg.Threshold_After_Background = removeBackgroundFirst;
     tiffImg.Threshold_After_Foreground = removeForegroundFirst;
-
-%     if tiffImg.Verbose
-%         fprintf('Threshold calculation finished.\n');
-%     end
     
     % Output the threshold matrix if requested.
     if nargout > 0
