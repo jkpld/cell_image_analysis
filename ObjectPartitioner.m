@@ -4,22 +4,21 @@ classdef (Abstract) ObjectPartitioner < matlab.mixin.Heterogeneous
         
         % Area_Normalizer : function that takes in image locations and
         % outputs the median object area at those positions. The areas are
-        % normalized before going through the keepObject() and
-        % attemptPartitioning() functions.
-        Area_Normalizer = @identity;
+        % normalized before going through the attemptPartitioning()
+        % functions.
+        Area_Normalizer = [];
 
         % Intensity_Normalizer : function that takes in image locations and
         % outputs the median object intensity at those positions. The
-        % intensities are normalized before going through the keepObject()
-        % and attemptPartitioning() functions.
-        Intensity_Normalizer = @identity;
+        % intensities are normalized before going through the
+        % attemptPartitioning() functions.
+        Intensity_Normalizer = [];
         
         % Restricted_Partitioning : Logical flag. If true, then the object
         % area and intensitiy will be normalized (using the Area_Normalizer
-        % and Intensity_Normalizer) and the results passed to the methods
-        % keepObject() and attemptPartitioning(). If false, then all
-        % objects will be kept, and all partitioning will be attempted on
-        % all objects.
+        % and Intensity_Normalizer) and the results passed to the
+        % attemptPartitioning() method. If false, then all objects will be
+        % kept, and all partitioning will be attempted on all objects.
         Restricted_Partitioning(1,1) logical = false;
         
         Minimum_Object_Size(1,1) double = 150;
@@ -96,8 +95,12 @@ classdef (Abstract) ObjectPartitioner < matlab.mixin.Heterogeneous
                 mu = mu + Image_Offset;
                 
                 % Normalize area and intensity
-                A = A ./ obj.Area_Normalizer(mu(:,1),mu(:,2));
-                iI = iI ./ obj.Intensity_Normalizer(mu(:,1),mu(:,2));
+                if ~isempty(obj.Area_Normalizer)
+                    A = A ./ obj.Area_Normalizer(mu(:,1),mu(:,2));
+                end
+                if ~isempty(obj.Intensity_Normalizer)
+                    iI = iI ./ obj.Intensity_Normalizer(mu(:,1),mu(:,2));
+                end
 
                 % Determine objects to attempt partitioning on
                 attempt = attemptPartitioning(obj, A, iI);
@@ -119,8 +122,4 @@ classdef (Abstract) ObjectPartitioner < matlab.mixin.Heterogeneous
         end
     end
     
-end
-
-function f = identity(~,~)
-f = 1;
 end
