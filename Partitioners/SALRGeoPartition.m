@@ -5,33 +5,13 @@ classdef SALRGeoPartition < ObjectPartitioner
 
         % Options for geometric partitioning
         Part_Options partitionOptions
-
-        % Area_Normalizer : function that takes in image locations and
-        % outputs the median object area at those positions. The areas are
-        % normalized before going through the keepObject() and
-        % attemptPartitioning() functions.
-        Area_Normalizer
-
-        % Intensity_Normalizer : function that takes in image locations and
-        % outputs the median object intensity at those positions. The
-        % intensities are normalized before going through the keepObject()
-        % and attemptPartitioning() functions.
-        Intensity_Normalizer
-        
-        % Restricted_Partitioning : Logical flag. If true, then the object
-        % area and intensitiy will be normalized (using the Area_Normalizer
-        % and Intensity_Normalizer) and the results passed to the methods
-        % keepObject() and attemptPartitioning(). If false, then all
-        % objects will be kept, and all partitioning will be attempted on
-        % all objects.
-        Restricted_Partitioning(1,1) logical
     end
 
     methods
         function obj = SALRGeoPartition(options)
 
             % Set default options.
-            
+            obj.Channel = "DAPI";
             % SALR clustering options
             try
                 obj.SALR_Options = seedPointOptions();
@@ -54,11 +34,6 @@ classdef SALRGeoPartition < ObjectPartitioner
             obj.Part_Options.Use_GPU = 1;
             obj.Part_Options.Minimum_Hole_Size = 10;
             obj.Part_Options.Minimum_Object_Size = 150;
-
-            obj.Area_Normalizer = @(~,~) 1;
-            obj.Intensity_Normalizer = @(~,~) 1;
-            
-            obj.Restricted_Partitioning = false;
                 
             % Overwrite with user supplied options.
             if nargin > 0
@@ -86,9 +61,15 @@ classdef SALRGeoPartition < ObjectPartitioner
                             end
                         case 'Restricted_Partitioning'
                             obj.Restricted_Partitioning = options.Restricted_Partitioning;
+                        case 'Channel'
+                            obj.Channel = options.Channel;
                     end
                 end
             end
+            
+            obj.Minimum_Object_Size = obj.Part_Options.Minimum_Object_Size;
+            obj.Minimum_Hole_Size = obj.Part_Options.Minimum_Hole_Size;
+            obj.Use_Parallel = obj.SALR_Options.Use_Parallel;
         end
 
         function BW_partitioned = partition(obj, BW, I, Image_Offset)
@@ -113,86 +94,16 @@ classdef SALRGeoPartition < ObjectPartitioner
                 Image_Offset = [0 0];
             end
             
-            nRows = size(BW,1); % Image size
-            
-            % Remove small holes from the mask
-            BW = ~bwareaopen(~BW, obj.Part_Options.Minimum_Hole_Size, 4);
-            
-            % Connected components
-            CC = bwconncomp(BW);
-            
-            if obj.Restricted_Partitioning
-                Use_Parallel = obj.SALR_Options.Use_Parallel;
-                pixIdx = CC.PixelIdxList;
-
-                % Object area, centroid, and intensity
-                A = zeros(CC.NumObjects,1);
-                mu = zeros(CC.NumObjects,1);
-                iI = zeros(CC.NumObjects,1);
-
-                if Use_Parallel
-                    Is = cellfun(@(x) I(x), pixIdx, 'UniformOutput',false);
-                    parfor i = 1:numel(pixIdx)
-                        A(i) = numel(pixIdx{i});
-                        y = rem(pixIdx{i} - 1, nRows) + 1;
-                        x = (pixIdx{i} - y)/nRows + 1;
-                        mu(i,:) = mean([x,y]);
-                        iI(i) = sum(Is{i});
-                    end
-                else
-                    for i = 1:numel(pixIdx)
-                        A(i) = numel(pixIdx{i});
-                        y = rem(pixIdx{i} - 1, nRows) + 1;
-                        x = (pixIdx{i} - y)/nRows + 1;
-                        mu(i,:) = mean([x,y]);
-                        iI(i) = sum(I(pixIdx{i}));
-                    end
-                end
-
-                % Offset centroids by the image offset.
-                mu = mu + Image_Offset;
-
-                % Objects that are too small
-                keep = A > obj.Part_Options.Minimum_Object_Size;
-                
-                % Normalize area and intensity
-                A = A ./ obj.Area_Normalizer(mu(:,1),mu(:,2));
-                iI = iI ./ obj.Intensity_Normalizer(mu(:,1),mu(:,2));
-
-                % Determine objects that should be kept
-                keep = keep & keepObject(obj, A, iI);
-                
-                A = A(keep);
-                iI = iI(keep);
-                CC.PixelIdxList = CC.PixelIdxList(keep);
-                CC.NumObjects = sum(keep);
-
-                % Determine objects to attempt partitioning on
-                attempt = attemptPartitioning(obj, A, iI);
-            else
-                A = cellfun(@numel, CC.PixelIdxList);
-                keep = A > obj.Part_Options.Minimum_Object_Size;
-                CC.PixelIdxList = CC.PixelIdxList(keep);
-                CC.NumObjects = sum(keep);
-                
-                attempt = true(CC.NumObjects,1);
-            end
+            % Pre-process the mask
+            [CC, attempt] = preProcess(I, BW, Image_Offset);
 
             % Partition the objects
             BW_partitioned = declumpNuclei(I, CC, obj.SALR_Options, obj.Part_Options, attempt);
 
-            % Remove boundary objects and objects smaller than the minimum
-            % allowed size.
-            BW_partitioned = bwareaopen(imclearborder(BW_partitioned), obj.Part_Options.Minimum_Object_Size);
+            % Post-process the mask
+            BW_partitioned = postProcess(BW_partitioned);
         end
 
-        function tf = attemptPartitioning(~, A, I)
-            tf = (A > 1.1) & (I > 1.6);
-        end
-
-        function tf = keepObject(~, A, I)
-            acceptanceContour = [3, 1; 10, 5; 10 7; 8 7; 2 3; 1 2; 0 2; 0 0; 3 0; 3 1];
-            tf =  inpolygon(I,A,acceptanceContour(:,1),acceptanceContour(:,2));
-        end
+        
     end
 end
