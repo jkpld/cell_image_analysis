@@ -7,13 +7,12 @@ classdef FeatureExtractor
     
     methods
         function obj = FeatureExtractor(channels)
-            obj.channels = channels;
+            if nargin > 0
+                obj.channels = channels;
+            end
         end
         
         function obj = addFeatureGroup(obj,group)
-%             if ~isa(group, 'FeatureGroup')
-%                 error('FeatureExtractor:badGroup','featureGroups must be a subclass of FeatureGroup');
-%             end
             obj.featureGroups(end+1) = group;
         end
         
