@@ -11,7 +11,7 @@ function [flatteningSurface, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections
 %   y : spatial y data [pixels]
 %   dapi : integrated dapi intensity for each object
 %   area : area of each object
-%   options : (options) structure with options for decimate_smooth()
+%   options : (optional) structure with options for decimate_smooth()
 %
 % Output
 %   flatteningSurface : struct with fields x, y, and Z. The smooth surface
@@ -52,11 +52,11 @@ dapi_c = dapi ./ DAPI_mode(x,y);
 
 idx = dapi_c > 0.6 & dapi_c < 1.4; % Get G1 band
 G1_stripe1 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',1); % Get median dapi value from bins 100 pixels wide along x direction
-dapi_c = dapi_c ./ interp1(G1_stripe1.X(:,1), G1_stripe1.Z(:,1), x(:,1)); % Divide out the median value
+dapi_c = dapi_c ./ nakeinterp1(G1_stripe1.X(:,1), G1_stripe1.Z(:,1), x); % Divide out the median value
 
 idx = dapi_c > 0.7 & dapi_c < 1.3; % Get G1 band
 G1_stripe2 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',1);  % Get median dapi value from bins 100 pixels wide along x direction
-dapi_c = dapi_c ./ interp1(G1_stripe2.X(:,1), G1_stripe2.Z(:,1), x(:,1)); % Divide out the median value
+dapi_c = dapi_c ./ nakeinterp1(G1_stripe2.X(:,1), G1_stripe2.Z(:,1), x); % Divide out the median value
 
 
 % Flatten the G1 band, again. --------------------------------------------
@@ -87,7 +87,7 @@ dapi_c = dapi_c ./ (DAPI_G2_mode(x,y)/2); % dapi_c = ((dapi_c-1) ./ (DAPI_G2_mod
 
 idx = dapi_c>1.7 & dapi_c<2.3;
 G2_stripe = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',2);
-dapi_c = dapi_c ./ (interp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x(:,1))/2);
+dapi_c = dapi_c ./ (nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x)/2);
 
 if DEBUG
     figure
@@ -119,7 +119,7 @@ Y = G1_1.Y;
 % This surface would need to be evaluated using scattered interpolants;
 % however, this is quite slow to evaluate, so reinterplate onto the same
 % square grid used to define the threshold surface.
-fun = scatteredInterpolant(X,Y,Z);
+fun = scatteredInterpolant(double(X),double(Y),double(Z));
 xg = tiffImg.threshold.x;
 yg = tiffImg.threshold.y;
 Z = fun({yg,xg})';
@@ -137,7 +137,7 @@ if nargout > 2
     G1_area  = TiffImg.decimate_and_smooth(x(idx), y(idx), area(idx), options);
     
     % interpolate onto the same square grid as the threshold
-    fun = scatteredInterpolant(G1_area.X, G1_area.Y, G1_area.Z);
+    fun = scatteredInterpolant(double(G1_area.X), double(G1_area.Y), double(G1_area.Z));
     Z = fun({yg,xg})';
     
     G1Area.Z = Z;
@@ -150,7 +150,7 @@ if nargout > 3
 end
 
 if DEBUG
-    tmp = @(x,y) interp2mex(Z, nakeinterp1(xg(:),(1:size(Z,2))',x), nakeinterp1(yg(:),(1:size(Z,1))',y));%griddedInterpolant({yg,xg},Z,'linear','nearest');%
+    tmp = @(x,y) interp2mex(flatteningSurface.Z, nakeinterp1(xg(:),(1:size(flatteningSurface.Z,2))',x), nakeinterp1(yg(:),(1:size(flatteningSurface.Z,1))',y));%griddedInterpolant({yg,xg},Z,'linear','nearest');%
     tmp_s = @(x) nakeinterp1((1:tiffImg.imageSize(2)).', Xstripe(:), x);
     
     dapi_c = dapi ./ tmp(x,y) ./ tmp_s(x);
