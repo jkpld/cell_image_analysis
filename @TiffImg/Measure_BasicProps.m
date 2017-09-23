@@ -1,34 +1,32 @@
-function [feature,feature_names] = Measure_BasicProps(tiffImg, channelName)
-% COMPUTE_FOREGROUND Compute the image foreground in each block of the
-% image.
+function [feature,feature_names] = Measure_BasicProps(tiffImg, channelName, varargin)
+% MEASURE_BASICPROPS Compute the centroid, area, and integrated intensity
+% for each object in the given image.
 %
-% foreground = Compute_Foreground(tiffImg)
+% [feature,feature_names] = Measure_BasicProps(tiffImg, channelName)
+%
+% Input
+%   channelName : The name of the input channel. This is only used to
+%     produce proper feature_Names.
+%
+% Optional param/value Input
+%   'Object_Mask' : a TiffImg object that gives the object mask. If
+%     provided, then the threshold will not need to be computed.
 %
 % Output
-%   foreground : Matrix giving the smoothed foreground computed accross the
-%     image. Even if no output is requested the foreground is still stored
-%     to the tiffImg object.
-%   computeXStripeArtifact : logical flag. If true, then the x stripe
-%     artifact will be computed after computing the smoothed foreground.
-%     (Default, false)
-%
-% Note : Computing the foreground requires that the image threshold has
-% already been calculated. The foreground is calculated by first
-% thresholding the image to obtain the foreground regions, and then
-% computing the median of the foreground region. If a background has
-% already been computed, then the background is taken into account before
-% computing the foreground.
-%
-% Note : If tiffImg.Surface_Smoothing_Radius is non-NaN, then the
-% foreground will be smoothed with a Lowess smoothing surface.
+%   feature : N x 4 array where N is the number of objects and 4 is the
+%     number of features (Centroid_x, Centroid_y, Area, Intensity)
+%   feature_names : 1 x 4 string array giving the name of each feature
 
 % James Kapaldo
 
+object_mask = parse_input(varargin{:});
+Use_Mask = ~isEmpty(object_mask);
+
 if nargin < 2
-    channelName = 'DAPI';
+    channelName = '';
 end
-if isempty(tiffImg.threshold_fun)
-    error('Compute_Foreground:noThreshold','The image threshold must be computed before computing the basic object properties.');
+if isempty(tiffImg.threshold_fun) && ~Use_Mask
+    error('Compute_Foreground:noThreshold','The image threshold must be computed before computing the basic object properties, or an Object_Mask must be provided.');
 end
 
 try
@@ -46,7 +44,7 @@ try
     foregroundFirst = hasForeground && tiffImg.Threshold_After_Background;
     foregroundAfter = hasForeground && ~tiffImg.Threshold_After_Background;
     
-    if backgroundFirst && foregroundFirst
+    if backgroundFirst && foregroundFirst && ~Use_Mask
         threshold = median(tiffImg.threshold.Z(:));
     end
     
@@ -56,7 +54,7 @@ try
     % Initialize features
     feature_names = bp.FeatureNames;
     num_feature = numel(feature_names);
-    feature = zeros(100000, num_feature, 'single');
+    feature = zeros(50000, num_feature, 'single');
     feature_count = 1;
     
     progress = displayProgress(tiffImg.numBlcks(2),'number_of_displays', 15,'active',tiffImg.Verbose, 'name', 'Computing basic properties,');
@@ -66,6 +64,7 @@ try
     for blck_x = 1:tiffImg.numBlcks(2)
         
         tiffImg.open() % Open image
+        if Use_Mask, object_mask.open(); end
         
         % Iterate over y blocks
         for blck_y = 1:tiffImg.numBlcks(1)
@@ -73,11 +72,6 @@ try
             % Get image block
             [I,x,y] = getBlock(tiffImg,blck_x,blck_y);
             
-            % Get threshold for block.
-            if ~backgroundFirst || ~foregroundFirst
-                threshold = tiffImg.threshold_fun(x,y);
-            end
-
             if tiffImg.Use_GPU
                 I = gpuArray(I);
             end
@@ -85,23 +79,43 @@ try
             % Smooth image
             Is = imfilter(I, tiffImg.Image_Smooth_Kernel, 'symmetric'); clear I
             
-            % Get the foreground mask
-            % - erode the foreground mask so that it is farther away from
-            % the background
-            if backgroundFirst
-                Is = Is - BG_fun(x,y);
-            end
-            if foregroundFirst
-                Is = Is ./ FG_fun(x,y);
-            end
-            
-            BW = Is > threshold;
-            
-            if backgroundAfter
-                Is = Is - BG_fun(x,y);
-            end
-            if foregroundAfter
-                Is = Is ./ FG_fun(x,y);
+            if Use_Mask
+                BW = getBlock(object_mask, blck_x, blck_y);
+                
+                if tiffImg.Use_GPU
+                    BW = gpuArray(BW);
+                end
+                
+                if hasBackground
+                    Is = Is - BG_fun(x,y);
+                end
+                if hasForeground
+                    Is = Is ./ FG_fun(x,y);
+                end
+            else
+                % Get threshold for block.
+                if ~backgroundFirst || ~foregroundFirst
+                    threshold = tiffImg.threshold_fun(x,y);
+                end
+
+                % Get the foreground mask
+                % - erode the foreground mask so that it is farther away from
+                % the background
+                if backgroundFirst
+                    Is = Is - BG_fun(x,y);
+                end
+                if foregroundFirst
+                    Is = Is ./ FG_fun(x,y);
+                end
+
+                BW = Is > threshold;
+
+                if backgroundAfter
+                    Is = Is - BG_fun(x,y);
+                end
+                if foregroundAfter
+                    Is = Is ./ FG_fun(x,y);
+                end
             end
             
             % Label matrix            
@@ -137,6 +151,7 @@ try
         end % y block
         
         tiffImg.close(); % Prevent memory buildup
+        if Use_Mask, object_mask.close(); end
         progress.iteration_end(); % Update progress counter
     end % x block
     
@@ -145,6 +160,7 @@ try
     
 catch ME
     tiffImg.close();
+    if Use_Mask, object_mask.close(); end
     if tiffImg.Use_GPU
         gpuDevice([]);
     end
@@ -153,5 +169,16 @@ catch ME
 end
 
 tiffImg.close();
+if Use_Mask, object_mask.close(); end
 
 end % function
+
+function object_mask = parse_input(varargin)
+p = inputParser;
+p.FunctionName = 'Measure_BasicProps';
+
+addParameter(p,'Object_Mask', TiffImg(), @(t) isa(t,'TiffImg'));
+
+parse(p,varargin{:})
+object_mask = p.Results.Object_Mask;        
+end

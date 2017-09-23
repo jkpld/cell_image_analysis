@@ -1,16 +1,22 @@
-function bg = Compute_Background(tiffImg, computeXStripeArtifact)
+function bg = Compute_Background(tiffImg, computeXStripeArtifact, varargin)
 % COMPUTE_BACKGROUND Compute the image background in each block of the
 % image.
 %
 % background = Compute_Background(tiffImg)
 %
+% Input
+%   computeXStripeArtifact : (optional) logical flag. If true, then the x
+%     stripe artifact will be computed after computing the smoothed
+%     background. (Default false)
+%
+% Optional param/value Input
+%   'Object_Mask' : a TiffImg object that gives the object mask. If
+%     provided, then the threshold will not need to be computed.
+%
 % Output
 %   background : Matrix giving the smoothed background computed accross the
 %     image. Even if no output is requested the background is still stored
 %     to the tiffImg object.
-%   computeXStripeArtifact : logical flag. If true, then the x stripe
-%     artifact will be computed after computing the smoothed background.
-%     (Default false)
 %
 % Note : Computing the background requires that the image threshold has
 % already been calculated. The background is calculated by first
@@ -22,15 +28,19 @@ function bg = Compute_Background(tiffImg, computeXStripeArtifact)
 
 % James Kapaldo
 
+object_mask = parse_input(varargin{:});
+Use_Mask = ~isEmpty(object_mask);
+
 if nargin < 2
     computeXStripeArtifact = false;
 end
 
-if isempty(tiffImg.threshold_fun)
-    error('Compute_Background:noThreshold','The image threshold must be computed before computing the background.');
+if isempty(tiffImg.threshold_fun) && ~Use_Mask
+    error('Compute_Background:noThreshold','The image threshold must be computed before computing the background, or an Object_Mask must be provided.');
 end
 
 try    
+
     BG = zeros(tiffImg.numBlcks, tiffImg.workingClass);
     seD2 = strel('diamond',2);
     
@@ -41,6 +51,7 @@ try
     for blck_x = 1:tiffImg.numBlcks(2)
         
         tiffImg.open() % Open image
+        if Use_Mask, object_mask.open(); end
         
         % Iterate over y blocks
         for blck_y = 1:tiffImg.numBlcks(1)
@@ -48,21 +59,34 @@ try
             % Get image block
             [I,x,y] = getBlock(tiffImg,blck_x,blck_y);
             
-            % Get threshold for block.
-            threshold = tiffImg.threshold_fun(x,y);
-            
             if tiffImg.Use_GPU
                 I = gpuArray(I);
-                threshold = gpuArray(threshold);
             end
             
             % Smooth image
             Is = imfilter(I, tiffImg.Image_Smooth_Kernel, 'symmetric'); clear I
-            
-            % Get the background mask
-            % - erode the background mask so that it is farther away from
-            % the objects
-            BW = imerode(Is < threshold, seD2); clear threshold
+                
+            if Use_Mask
+                BWo = getBlock(object_mask, blck_x, blck_y);
+                
+                if tiffImg.Use_GPU
+                    BWo = gpuArray(BWo);
+                end
+                
+                BW = imerode(~BWo, seD2); clear BWo
+            else
+                % Get threshold for block.
+                threshold = tiffImg.threshold_fun(x,y);
+
+                if tiffImg.Use_GPU
+                    threshold = gpuArray(threshold);
+                end               
+
+                % Get the background mask
+                % - erode the background mask so that it is farther away from
+                % the objects
+                BW = imerode(Is < threshold, seD2); clear threshold
+            end
             
             % Get the median background intensity
             BGi = median(Is(BW),'omitnan'); clear Is BW
@@ -75,34 +99,10 @@ try
             end
             BG(blck_y,blck_x) = BGi;
             
-            %             Th = thrsh_fun({y,xt});
-            %             Th_d = gpuArray(Th);
-            %
-            %             I = single(I);
-            %             I_d = gpuArray(I);
-            %             Is_d = imfilter(I_d,H,'symmetric');
-            %
-            %             % Background and foreground mask
-            %             BW_d = Is_d > Th_d;
-            %             clear Th_d
-            %             BW_BG_d = ~imdilate(BW_d,seD2);
-            %             BW_FG_d = imerode(BW_d,seD2);
-            %
-            %             % Background and forground value
-            %             BGt_d = median(Is_d(BW_BG_d));
-            %             FGt_d = median(Is_d(BW_FG_d));
-            %             BG(blck_y,blck_x) = gather(BGt_d);
-            %             FG(blck_y,blck_x) = gather(FGt_d);
-            %             clear I_d BGt_d FGt_d BW_BG_d BW_FG_d BW_d
-            %
-            %             % Bluriness
-            %             N = numel(I);
-            %             IsFFT_d = abs(fft2(Is_d));
-            %             BLUR(blck_y,blck_x) = gather(sum(IsFFT_d(:) > max(IsFFT_d(:))/1000)) / sqrt(N);
-            %             clear Is_d IsFFT_d
         end % y block
         
         tiffImg.close(); % Prevent memory buildup
+        if Use_Mask, object_mask.close(); end
         progress.iteration_end(); % Update progress counter
     end % x block
     
@@ -113,7 +113,7 @@ try
     tiffImg.BG_smooth = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',BG);
     
     if computeXStripeArtifact
-        Compute_StripeArtifact(tiffImg,'b');
+        Compute_StripeArtifact(tiffImg,'b', 'Object_Mask', object_mask);
     end
     
     % Output the background matrix if requested.
@@ -121,9 +121,9 @@ try
         bg = BG;
     end
     
-    
 catch ME
     tiffImg.close();
+    if Use_Mask, object_mask.close(); end
     if tiffImg.Use_GPU
         gpuDevice([]);
     end
@@ -132,5 +132,16 @@ catch ME
 end
 
 tiffImg.close();
+if Use_Mask, object_mask.close(); end
 
 end % function
+
+function object_mask = parse_input(varargin)
+p = inputParser;
+p.FunctionName = 'Compute_Background';
+
+addParameter(p,'Object_Mask', TiffImg(), @(t) isa(t,'TiffImg'));
+
+parse(p,varargin{:})
+object_mask = p.Results.Object_Mask;        
+end

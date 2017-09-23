@@ -1,8 +1,17 @@
-function st = Compute_StripeArtifact(tiffImg, BG_or_FG)
+function st = Compute_StripeArtifact(tiffImg, BG_or_FG, varargin)
 % COMPUTE_STRIPEARTIFACT Compute the X stripe artifact that appears in some
 % images due to bad microscope callibration.
 %
 % stripe = Compute_StripeArtifact(tiffImg)
+%
+% Input
+%   BG_or_FG : String that unambigously matches either 'background' or
+%     'foreground'. This will determine if the background stripe or the
+%     foreground stripe is computed.
+%
+% Optional param/value Input
+%   'Object_Mask' : a TiffImg object that gives the object mask. If
+%     provided, then the threshold will not need to be computed.
 %
 % Output
 %   stripe : 1 x nCols array giving the stripe artifact computed accross
@@ -22,9 +31,10 @@ function st = Compute_StripeArtifact(tiffImg, BG_or_FG)
 % James Kapaldo
 
 % Check input and get required functions
-[isBG, str, BG_fun, FG_fun] = parse_input(tiffImg, BG_or_FG);
+[isBG, str, BG_fun, FG_fun, object_mask] = parse_input(tiffImg, BG_or_FG, varargin{:});
+Use_Mask = ~isEmpty(object_mask);
 
-try
+try    
     stripe = zeros(1, tiffImg.imageSize(2), tiffImg.workingClass);
     y = (1:tiffImg.imageSize(1)).';
     seD2 = strel('diamond',2);
@@ -36,39 +46,50 @@ try
 
         % Get column
         [I,x] = getColumn(tiffImg, col_x);
-                
-        % Get threshold for slice
-        threshold = tiffImg.threshold_fun(x,y);
-
+        
         if tiffImg.Use_GPU
             I = gpuArray(I);
         end
         
         % Smooth image
         Is = imfilter(I, tiffImg.Image_Smooth_Kernel, 'symmetric'); clear I
+        
+        if Use_Mask
+            BWo = getColumn(object_mask, col_x);
+                
+            if tiffImg.Use_GPU
+                BWo = gpuArray(BWo);
+            end
+            
+            if ~isBG
+                BWo = ~BWo;
+            end
 
-        % Remove background before thresholding if supposed to
-        if tiffImg.Threshold_After_Background
-            Ist = Is - BG_fun(x,y);
+            BW = imdilate(BWo, seD2); clear BWo
         else
-            Ist = Is;
+            
+            % Get threshold for slice
+            threshold = tiffImg.threshold_fun(x,y);
+
+            % Remove background before thresholding if supposed to
+            if tiffImg.Threshold_After_Background
+                Ist = Is - BG_fun(x,y);
+            else
+                Ist = Is;
+            end
+
+            % Get background/foreground object mask
+            % If computing the background stripe than we want to NaN out the
+            % foreground, and vise-versa.
+            if isBG
+                BW = imdilate(Ist > threshold, seD2); 
+            else
+                BW = imdilate(Ist < threshold, seD2); 
+            end
         end
         
-        % Get background/foreground object mask
-        % If computing the background stripe than we want to NaN out the
-        % foreground, and vise-versa.
-        if isBG
-            BW = imdilate(Ist > threshold, seD2); 
-        else
-            BW = imdilate(Ist < threshold, seD2); 
-        end
-        
-        % Remove background after thresholding if supposed to
-%         if ~tiffImg.Threshold_After_Background
-%             Is = Is - BG_fun(x,y);
-%         end
-        
-        % Remove foreground if computing foreground stripe
+        % Divide the image by the background or foreground. This will make
+        % the x-stripe a multiplicitive factor.
         if isBG
             Is = Is ./ BG_fun(x,y);
         else
@@ -106,6 +127,7 @@ try
     
 catch ME
     tiffImg.close();
+    if Use_Mask, object_mask.close(); end
     if tiffImg.Use_GPU
         gpuDevice([]);
     end
@@ -114,13 +136,23 @@ catch ME
 end
 
 tiffImg.close();
+if Use_Mask, object_mask.close(); end
 
 end % function
 
 
-function [BGstripe, str, BG_fun, FG_fun] = parse_input(tiffImg, BG_or_FG)
-if isempty(tiffImg.threshold_fun)
-    error('Compute_StripeArtifact:noThreshold','The image threshold and then the background or foreground must be computed before computing the stripe artifact.');
+function [BGstripe, str, BG_fun, FG_fun, object_mask] = parse_input(tiffImg, BG_or_FG, varargin)
+
+p = inputParser;
+p.FunctionName = 'Compute_StripeArtifact';
+
+addParameter(p,'Object_Mask', TiffImg(), @(t) isa(t,'TiffImg'));
+
+parse(p,varargin{:})
+object_mask = p.Results.Object_Mask;  
+
+if isempty(tiffImg.threshold_fun) && isempty(object_mask)
+    error('Compute_StripeArtifact:noThreshold','There must be an Object_Mask, or the image threshold and then the background or foreground must be computed before computing the stripe artifact.');
 end
 
 idx = find(strncmpi(BG_or_FG,{'background','foreground'},numel(BG_or_FG)));
@@ -161,5 +193,9 @@ else
     
     % We also need a function to evaluate the smoothe foreground.
     FG_fun = generateFunction(tiffImg,tiffImg.FG_smooth);
-end    
+end
+
+
+
+
 end
