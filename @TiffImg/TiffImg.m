@@ -1,4 +1,4 @@
-classdef TiffImg < handle
+classdef TiffImg < matlab.mixin.Copyable
     properties
         blockSize(1,1) double
         Use_GPU(1,1) logical = false;
@@ -24,24 +24,25 @@ classdef TiffImg < handle
 
         Sharpness = []
     end
-%     properties (Dependent)
-%         BackgroundEvalFun(1,1) function_handle
-%         ForegroundEvalFun(1,1) function_handle
-%     end
+
     properties (SetAccess = private)
         FileName
         FileID
-        imageSize
-        imageClass
-        tileSize
-        numTiles
-        maxSampleValue
+        
         mmPerPixel
-    end
-    properties (SetAccess = private, Hidden)
-        tiles
+        
+        workingClass
+        imageClass
+        imageSize
+        
+        tileSize
         tilesPerBlck
         numBlcks
+        numTiles
+    end
+    properties (SetAccess = private, Hidden)
+        maxSampleValue
+        tiles
         xEdges
         yEdges
         xCenters
@@ -50,8 +51,6 @@ classdef TiffImg < handle
         tile_x_inds
         blck_y_inds
         blck_x_inds
-        
-        workingClass
     end
     properties (SetAccess = private)
         threshold_fun = []
@@ -111,7 +110,7 @@ classdef TiffImg < handle
                     error('tiffReadHelper:unsupporetedFormat','The image has an unsupported format, Supported formats are uint, int, and floating point.')
             end
 
-            tmp = tifflib('readEncodedTile',obj.FileID,1);
+            tmp = tifflib('readEncodedTile',obj.FileID,0);
             obj.imageClass = class(tmp);
             
             % Set the working class. Always work with a float type to have
@@ -164,6 +163,10 @@ classdef TiffImg < handle
             obj.blck_x_inds = 1:obj.tilesPerBlck(2);
         end
 
+        function tf = isEmpty(obj)
+            tf = isempty(obj.FileName);
+        end
+        
         function delete(obj)
             obj.close()
         end
@@ -301,24 +304,17 @@ classdef TiffImg < handle
                 x = (1:(maxX-1)) + (blck_x-1)*obj.blockSize;
             end
         end
-
+        
         % Functions defined externally
         Z = smoothSurf(obj,z,type);
         th = Compute_Threshold(obj, removeBackgroundFirst, removeForegroundFirst);
-        bg = Compute_Background(obj, computeXStripeArtifact);
-        fg = Compute_Foreground(obj, computeXStripeArtifact);
-        st = Compute_StripeArtifact(obj, BG_or_FG)
+        bg = Compute_Background(obj, computeXStripeArtifact, varargin);
+        fg = Compute_Foreground(obj, computeXStripeArtifact, varargin);
+        st = Compute_StripeArtifact(obj, BG_or_FG, varargin)
         sh = Compute_Sharpness(obj);
-        [x, x_names] = Measure_BasicProps(obj,channelName);
-        [flatteningSurface, Xstripe] = Compute_DAPI_Corrections(tiffImg,x,y,dapi)
-
-%         function fun = get.BackgroundEvalFun(obj)
-%             fun = generateFunction(obj, obj.BG_smooth, obj.BG_Xstripe, false);
-%         end
-% 
-%         function fun = get.ForegroundEvalFun(obj)
-%             fun = generateFunction(obj, obj.FG_smooth, obj.FG_Xstripe, false);
-%         end
+        [x, x_names] = Measure_BasicProps(obj,channelName, varargin);
+        feature = Measure_Intensity(tiffImg, Use_Parallel, varargin)
+        [flatteningSurface, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(tiffImg,x,y,dapi,area,options)
         
         function fig = plot(obj,name)
             % PLOT Plot one of the computed quantities.
@@ -366,11 +362,6 @@ classdef TiffImg < handle
                     Z = obj.(name).Z;
 
                     if any(size(Z)==1) % need scattered surface
-%                         toRemove = x < 0 || x > obj.imageSize(2) || ...
-%                             y < 0 || y > obj.imageSize(1);
-%                         x(toRemove) = [];
-%                         y(toRemove) = [];
-%                         Z(toRemove) = [];
                         tri = delaunay(x,y);
                         trisurf(tri,x*obj.mmPerPixel,y*obj.mmPerPixel,Z);
                     else
@@ -397,9 +388,6 @@ classdef TiffImg < handle
                 fig = fg;
             end
         end
-    end
-
-    methods %(Access = private)
 
         function fun = generateFunction(obj, z_smooth, x_stripe, multiplyStripe)
             % Create a function handle that can be used to evaluate
