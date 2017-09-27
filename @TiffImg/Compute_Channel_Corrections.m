@@ -1,4 +1,4 @@
-function [flatteningSurface, Xstripe] = Compute_Channel_Corrections(tiffImg, x, y, I, options)
+function [flatteningSurface, Xstripe] = Compute_Channel_Corrections(tiffImg, x, y, I, options, name)
 % COMPUTE_CHANNEL_CORRECTIONS Compute a smooth surface that hopefully
 % compensates for uneven staining, and compute the Xstripe artifact.
 %
@@ -24,9 +24,9 @@ function [flatteningSurface, Xstripe] = Compute_Channel_Corrections(tiffImg, x, 
 
 % James Kapaldo
 
-if nargin < 5
+if nargin < 5 || isempty(options)
     options = struct( ...
-        'reductionMethod', 'median', ...
+        'reductionMethod', 'mode', ...
         'gridType', 'hexagonal', ...
         'cleanHexagonData', true, ...
         'binSize', [1.5/tiffImg.mmPerPixel,1], ...
@@ -34,13 +34,18 @@ if nargin < 5
         'defaultValue',1);
 end
 
-DEBUG = 0;
+if nargin < 6
+    name = 'unknown';
+else
+    name = char(name);
+end
+
+DEBUG = 1;
 
 if DEBUG
     figure %#ok<*UNRCH>
     line(x,y,I,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
-    surface(flatteningSurface.x,flatteningSurface.y,flatteningSurface.Z)
-    title('Initial data')
+    title(['Initial data : channel ' name])
     view(0,0)
     setTheme(gcf,'dark')
 end
@@ -54,7 +59,7 @@ I_c = I ./ flattener(x,y);
 if DEBUG
     figure
     line(x,y,I_c,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
-    title('Flattened data before x stripe correction')
+    title(['Flattened data before x stripe correction : channel ' name])
     view(0,0)
     setTheme(gcf,'dark')
 end
@@ -67,21 +72,22 @@ I_c = I_c ./ nakeinterp1(Xstripe1.X(:,1), Xstripe1.Z(:,1), x); % Divide out the 
 idx = I_c > 0.7 & I_c < 1.3; % Get data around flattened region
 Xstripe2 = decimateData(x(idx),ones(sum(idx),1),I_c(idx),'binSize',[100,100],'defaultValue',1); % Get median dapi value from bins 100 pixels wide along x direction
 
-if DEBUG
-    I_c = I_c ./ nakeinterp1(Xstripe2.X(:,1), Xstripe2.Z(:,1), x); % Divide out the median value
-    
+% Combine stripe corrections
+xg = (1:tiffImg.imageSize(2)).';
+Xstripe = nakeinterp1(Xstripe1.X(:,1), Xstripe1.Z(:,1), xg) ...
+    .* nakeinterp1(Xstripe2.X(:,1), Xstripe2.Z(:,1), xg);
+
+Xstripe = Xstripe'; %should be row.
+
+I_c = I ./ nakeinterp1(xg, Xstripe, x);
+
+if DEBUG    
     figure
     line(x,y,I_c,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
-    title('After x stripe correction')
+    title(['After x stripe correction (without flattening) : channel ' name])
     view(0,0)
     setTheme(gcf,'dark')
 end
-
-% Combine stripe corrections
-Xstripe = nakeinterp1(Xstripe1.X(:,1), Xstripe1.Z(:,1), (1:tiffImg.imageSize(2)).') ...
-    .* nakeinterp1(Xstripe2.X(:,1), Xstripe2.Z(:,1), (1:tiffImg.imageSize(2)).');
-
-Xstripe = Xstripe'; %should be row.
 
 % Compute flattening surface. --------------------------------------------
 options.binSize = [2.5/tiffImg.mmPerPixel, 1];
@@ -94,7 +100,7 @@ options.smoothingRadius = 6/tiffImg.mmPerPixel;
     end
 options.reductionMethod = @reductionMethod;
 
-S = TiffImg.decimate_and_smooth(x, y, I, options);
+S = TiffImg.decimate_and_smooth(x, y, I_c, options);
 
 % This surface would need to be evaluated using scattered interpolants;
 % however, this is quite slow to evaluate, so reinterplate onto the same
@@ -110,9 +116,9 @@ flatteningSurface.y = yg;
 
 if DEBUG
     figure
-    line(x,y,I,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
+    line(x,y,I_c,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
     surface(flatteningSurface.x,flatteningSurface.y,flatteningSurface.Z)
-    title('Channel staining correction (2-4% value)')
+    title(['Channel staining correction (2-4% value, after stripe crrctn) : channel ' name])
     setTheme(gcf,'dark')
 end
 
