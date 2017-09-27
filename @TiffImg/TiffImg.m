@@ -13,7 +13,7 @@ classdef TiffImg < matlab.mixin.Copyable
         % foreground). If set to NaN, then smoothing will be disabled.
         Surface_Smoothing_Radius(1,1) double = NaN;
     end
-    properties %(SetAccess = private)
+    properties 
         threshold = []
 
         BG_smooth = []
@@ -241,6 +241,23 @@ classdef TiffImg < matlab.mixin.Copyable
                 y = (1:m).' + (row_idx-1)*obj.tileSize(1);
             end
         end
+        
+        function I = getTile(obj, tile_idx)
+            % initialize array for image stripe
+            I = zeros(obj.tileSize,obj.imageClass);
+            
+            tmp = tifflib('readEncodedTile',obj.FileID,double(tile_idx));
+            
+            [m,n] = size(tmp);
+            I(1:m, 1:n) = tmp;
+            
+            % Convert image to working class.
+            if ~strcmp(obj.imageClass,'logical')
+                I = cast(I,obj.workingClass);
+                I = I / cast(obj.maxSampleValue,obj.workingClass);
+            end
+        end
+        
         
         function [I,x,y] = getBlock(obj,blck_x,blck_y)
             tmpB_x_inds = obj.blck_x_inds + (blck_x-1)*obj.tilesPerBlck(2);
@@ -470,6 +487,31 @@ classdef TiffImg < matlab.mixin.Copyable
             % outside of the defined limits. Therefore, the half blockSize
             % on the image boarder could have jagged edges.
 
+        end
+        
+        function tiles_xy = computeTileNumbers(obj,bboxes)
+            % COMPUTETILENUMBERS Compute the tile numbers that contain the
+            % bounding boxes given.
+            %
+            % tiles = computeTileNumbers(obj,bboxes)
+            %
+            % Input
+            %   bboxes : Nx4 list of bounding boxes
+            %
+            % Output 
+            %   tiles : Nx4 array where the i'th row is [x1,y1,x2,y2].
+            %     x1/x2 is the left/right-most tiles. y1/y2 is the
+            %     top/bottom-most tiles. These are not the linear indices
+            %     that can be used to read in a tile with tifflib; they
+            %     must be converted to linear indices. The x/y indices are
+            %     0 based.
+            
+            % compute x,y points of bounding box corners
+            %  -> bounding box = (left, top, width, height)
+            bboxes(:,3:4) = bboxes(:,3:4) + bboxes(:,1:2);
+            
+            % x,y tile numbers, 0 based
+            tiles_xy = ceil(bboxes ./ [obj.tileSize,obj.tileSize]) - 1;
         end
     end
     
