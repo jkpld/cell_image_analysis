@@ -26,7 +26,7 @@ function [S,fun] = decimate_and_smooth(x,y,z,varargin)
 
 % Parse inputs
 p = inputParser;
-p.FunctionName = 'decimate_and_fit';
+p.FunctionName = 'decimate_and_smooth';
 p.KeepUnmatched = 1;
 
 addParameter(p,'smoothingRadius',nan, @(t) validateattributes(t,{'numeric'},{'scalar'}))
