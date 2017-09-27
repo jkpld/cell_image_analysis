@@ -33,6 +33,7 @@ function st = Compute_StripeArtifact(tiffImg, BG_or_FG, varargin)
 % Check input and get required functions
 [isBG, str, BG_fun, FG_fun, object_mask] = parse_input(tiffImg, BG_or_FG, varargin{:});
 Use_Mask = ~isEmpty(object_mask);
+object_mask.blockSize = tiffImg.blockSize;
 
 try    
     stripe = zeros(1, tiffImg.imageSize(2), tiffImg.workingClass);

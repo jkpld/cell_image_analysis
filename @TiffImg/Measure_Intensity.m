@@ -20,6 +20,7 @@ function feature = Measure_Intensity(tiffImg, Use_Parallel, varargin)
 Use_Parallel = logical(Use_Parallel);
 object_mask = parse_input(varargin{:});
 Use_Mask = ~isEmpty(object_mask);
+object_mask.blockSize = tiffImg.blockSize;
 
 if isempty(tiffImg.threshold_fun) && ~Use_Mask
     error('Compute_Foreground:noThreshold','The image threshold must be computed before computing the basic object properties, or an Object_Mask must be provided.');
@@ -143,7 +144,7 @@ try
                 end                
 
                 if N+feature_count-1 > size(feature,1)
-                    feature = [feature; zeros(50000, num_feature,'single')]; %#ok<AGROW>
+                    feature = [feature; zeros(50000, 1,'single')]; %#ok<AGROW>
                 end
                 feature(feature_count:N+feature_count-1,:) = x_i;
                 feature_count = feature_count + N;
