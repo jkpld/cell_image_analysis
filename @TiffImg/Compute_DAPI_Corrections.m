@@ -35,7 +35,7 @@ if nargin < 6
         'defaultValue',1);
 end
 
-DEBUG = 0;
+DEBUG = 1;
 
 % Initial correction. ----------------------------------------------------
 
@@ -44,6 +44,16 @@ DEBUG = 0;
 
 [G1_1,DAPI_mode] = TiffImg.decimate_and_smooth(x, y, dapi, options);
 dapi_c = dapi ./ DAPI_mode(x,y);
+
+if DEBUG
+    figure
+    line(x,y,dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
+    title('after initial g1 flattening')
+    setTheme(gcf,'dark')
+    axis tight
+    zlim([0,3])
+    view(0,0)
+end
 
 % Remove the stripe artifact with two iterations of fitting. -------------
 
@@ -58,6 +68,15 @@ idx = dapi_c > 0.7 & dapi_c < 1.3; % Get G1 band
 G1_stripe2 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',1);  % Get median dapi value from bins 100 pixels wide along x direction
 dapi_c = dapi_c ./ nakeinterp1(G1_stripe2.X(:,1), G1_stripe2.Z(:,1), x); % Divide out the median value
 
+if DEBUG
+    figure
+    line(x,y,dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
+    title('after stripe correction')
+    setTheme(gcf,'dark')
+    axis tight
+    zlim([0,3])
+    view(0,0)
+end
 
 % Flatten the G1 band, again. --------------------------------------------
 
@@ -87,7 +106,12 @@ dapi_c = dapi_c ./ (DAPI_G2_mode(x,y)/2); % dapi_c = ((dapi_c-1) ./ (DAPI_G2_mod
 
 idx = dapi_c>1.7 & dapi_c<2.3;
 G2_stripe = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',2);
-dapi_c = dapi_c ./ (nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x)/2);
+dapi_c = dapi_c ./ (nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x)/2) ;
+
+idx = dapi_c > 0.7 & dapi_c < 1.3; % Get G1 band
+G1_stripe3 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',1);  % Get median dapi value from bins 100 pixels wide along x direction
+dapi_c = dapi_c ./ nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), x); % Divide out the median value
+
 
 if DEBUG
     figure
@@ -107,6 +131,7 @@ end
 % Interpolate the stripe to all for each x-pixel of the image.
 Xstripe = nakeinterp1(G1_stripe1.X(:,1), G1_stripe1.Z(:,1), (1:tiffImg.imageSize(2)).') ...
     .* nakeinterp1(G1_stripe2.X(:,1), G1_stripe2.Z(:,1), (1:tiffImg.imageSize(2)).') ...
+    .* nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), (1:tiffImg.imageSize(2)).') ...
     .* nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1)/2, (1:tiffImg.imageSize(2)).');
 
 Xstripe = Xstripe'; %should be row.
@@ -120,8 +145,8 @@ Y = G1_1.Y;
 % however, this is quite slow to evaluate, so reinterplate onto the same
 % square grid used to define the threshold surface.
 fun = scatteredInterpolant(double(X),double(Y),double(Z));
-xg = tiffImg.threshold.x;
-yg = tiffImg.threshold.y;
+xg = tiffImg.BG_smooth.x;
+yg = tiffImg.BG_smooth.y;
 Z = fun({yg,xg})';
 
 flatteningSurface.Z = Z;
@@ -156,9 +181,10 @@ if DEBUG
     dapi_c = dapi ./ tmp(x,y) ./ tmp_s(x);
     
     figure
-    line(x,y,dapi_c,'marker','.','linestyle','none','color','y','markersize',1)
+    line(x,y,dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
     title('Data when applying correction all at once')
     setTheme(gcf,'dark')
+    axis tight
     zlim([0,3])
     
     histogram(ax,dapi_c,'BinEdges',h.BinEdges,'FaceColor','r')
