@@ -25,13 +25,19 @@ function [flatteningSurface, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections
 
 % James Kapaldo
 
+% Nuclei density
+rho = numel(x)/prod(tiffImg.imageSize*tiffImg.mmPerPixel); % nuclei/mm^2
+
 if nargin < 6
+    nucleiPerBin = 300; % emperical
+    bin = sqrt( (2/sqrt(3)) * nucleiPerBin / rho );
+    smooth = 2.5*bin;
     options = struct( ...
         'reductionMethod', 'mode', ...
         'gridType', 'hexagonal', ...
         'cleanHexagonData', true, ...
-        'binSize', [1.5/tiffImg.mmPerPixel,1], ...
-        'smoothingRadius',4/tiffImg.mmPerPixel, ...
+        'binSize', [bin/tiffImg.mmPerPixel,1], ... % 1.5/mmPerPixel
+        'smoothingRadius',smooth/tiffImg.mmPerPixel, ... % 4/mmPerPixel
         'defaultValue',1);
 end
 
@@ -104,7 +110,7 @@ dapi_c = dapi_c ./ (DAPI_G2_mode(x,y)/2); % dapi_c = ((dapi_c-1) ./ (DAPI_G2_mod
 % Select the g2 band. Compute the median dapi value along small x-slices to
 % extract the stripe. Divide the stripe away.
 
-idx = dapi_c>1.7 & dapi_c<2.3;
+idx = dapi_c > 1.7 & dapi_c < 2.3;
 G2_stripe = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',2);
 dapi_c = dapi_c ./ (nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x)/2) ;
 
@@ -137,17 +143,39 @@ Xstripe = nakeinterp1(G1_stripe1.X(:,1), G1_stripe1.Z(:,1), (1:tiffImg.imageSize
 Xstripe = Xstripe'; %should be row.
 
 % Construct the flattening surface
-Z = G1_1.Z .* G1_2.Z .* G2_1.Z/2;
-X = G1_1.X;
-Y = G1_1.Y;
 
-% This surface would need to be evaluated using scattered interpolants;
-% however, this is quite slow to evaluate, so reinterplate onto the same
-% square grid used to define the threshold surface.
-fun = scatteredInterpolant(double(X),double(Y),double(Z));
+% Each flattening surface could have a different number of points. If this
+% is the case, then they need to be interpolated onto a grid of the same
+% size before combining them.
+
+% Grid to re-interpolate results on - use the grid for creating the
+% background.
 xg = tiffImg.BG_smooth.x;
 yg = tiffImg.BG_smooth.y;
-Z = fun({yg,xg})';
+
+if isequal(G1_1.X,G1_2.X) && isequal(G1_2.X,G2_1.X)
+    Z = G1_1.Z .* G1_2.Z .* G2_1.Z/2;
+    X = G1_1.X;
+    Y = G1_1.Y;
+    
+    % This surface would need to be evaluated using scattered interpolants;
+    % however, this is quite slow to evaluate, so reinterplate onto the same
+    % square grid
+    fun = scatteredInterpolant(double(X),double(Y),double(Z));
+    Z = fun({xg,yg})';
+else
+    fun = scatteredInterpolant(double(G1_1.X),double(G1_1.Y),double(G1_1.Z));
+    
+    G1_1Z = fun({xg,yg})';
+    
+    fun = scatteredInterpolant(double(G1_2.X),double(G1_2.Y),double(G1_2.Z));
+    G1_2Z = fun({xg,yg})';
+    
+    fun = scatteredInterpolant(double(G2_1.X),double(G2_1.Y),double(G2_1.Z));
+    G2_1Z = fun({xg,yg})';
+    
+    Z = G1_1Z .* G1_2Z .* G2_1Z/2;
+end
 
 flatteningSurface.Z = Z;
 flatteningSurface.x = xg;
@@ -155,15 +183,31 @@ flatteningSurface.y = yg;
 
 % Compute the G1 area surface --------------------------------------------
 if nargout > 2
+    nucleiPerBin = 800; % emperical
+    bin = sqrt( (2/sqrt(3)) * nucleiPerBin / rho );
+    smooth = 2.5*bin;
     idx = dapi_c > 0.7 & dapi_c < 1.3;
     options.defaultValue = nan;
-    options.binSize = [2.5/tiffImg.mmPerPixel,1];
-    options.smoothingRadius = 6/tiffImg.mmPerPixel;
+    options.binSize = [bin/tiffImg.mmPerPixel,1];%[2.5/tiffImg.mmPerPixel,1];
+    options.smoothingRadius = smooth/tiffImg.mmPerPixel;%6/tiffImg.mmPerPixel;
+    options.reductionMethod = 'median';
     G1_area  = TiffImg.decimate_and_smooth(x(idx), y(idx), area(idx), options);
     
     % interpolate onto the same square grid as the threshold
     fun = scatteredInterpolant(double(G1_area.X), double(G1_area.Y), double(G1_area.Z));
-    Z = fun({yg,xg})';
+    Z = fun({xg,yg})';
+    
+    figure
+    
+    % Plot surface
+    tri = delaunay(G1_area.X,G1_area.Y);
+    trisurf(tri,G1_area.X,G1_area.Y,G1_area.Z);
+    line(x(idx),y(idx),area(idx),'marker','.','linestyle','none','color','g','markersize',1)
+    
+%     surface(xg,yg,Z)
+    title('Area surface')
+    setTheme(gcf,'dark')
+    axis tight
     
     G1Area.Z = Z;
     G1Area.x = xg;
