@@ -20,7 +20,7 @@ function feature = Measure_Intensity(tiffImg, Use_Parallel, varargin)
 Use_Parallel = logical(Use_Parallel);
 object_mask = parse_input(varargin{:});
 Use_Mask = ~isEmpty(object_mask);
-object_mask.blockSize = tiffImg.blockSize;
+if Use_Mask, object_mask.blockSize = tiffImg.blockSize; end
 
 if isempty(tiffImg.threshold_fun) && ~Use_Mask
     error('Compute_Foreground:noThreshold','The image threshold must be computed before computing the basic object properties, or an Object_Mask must be provided.');

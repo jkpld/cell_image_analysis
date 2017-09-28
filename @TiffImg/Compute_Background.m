@@ -30,7 +30,7 @@ function bg = Compute_Background(tiffImg, computeXStripeArtifact, varargin)
 
 object_mask = parse_input(varargin{:});
 Use_Mask = ~isEmpty(object_mask);
-object_mask.blockSize = tiffImg.blockSize;
+if Use_Mask, object_mask.blockSize = tiffImg.blockSize; end
 
 if nargin < 2
     computeXStripeArtifact = false;
