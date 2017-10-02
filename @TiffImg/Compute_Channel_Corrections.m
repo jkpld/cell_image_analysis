@@ -24,13 +24,20 @@ function [flatteningSurface, Xstripe] = Compute_Channel_Corrections(tiffImg, x, 
 
 % James Kapaldo
 
+% Nuclei density
+rho = numel(x)/prod(tiffImg.imageSize*tiffImg.mmPerPixel); % nuclei/mm^2
+
 if nargin < 5 || isempty(options)
+    nucleiPerBin = 300; % emperical
+    bin = sqrt( (2/sqrt(3)) * nucleiPerBin / rho );
+    smooth = 2.5*bin;
+    
     options = struct( ...
         'reductionMethod', 'mode', ...
         'gridType', 'hexagonal', ...
         'cleanHexagonData', true, ...
-        'binSize', [1.5/tiffImg.mmPerPixel,1], ...
-        'smoothingRadius',4/tiffImg.mmPerPixel, ...
+        'binSize', [bin/tiffImg.mmPerPixel,1], ... % 1.5/mmPerPixel
+        'smoothingRadius',smooth/tiffImg.mmPerPixel, ... % 4/mmPerPixel
         'defaultValue',1);
 end
 
@@ -90,10 +97,15 @@ if DEBUG
 end
 
 % Compute flattening surface. --------------------------------------------
-options.binSize = [2.5/tiffImg.mmPerPixel, 1];
-options.smoothingRadius = 6/tiffImg.mmPerPixel;
+nucleiPerBin = 800; % emperical
+bin = sqrt( (2/sqrt(3)) * nucleiPerBin / rho );
+smooth = 2.5*bin;
+    
+options.binSize = [bin/tiffImg.mmPerPixel,1]; % [2.5/tiffImg.mmPerPixel,1];
+options.smoothingRadius = smooth/tiffImg.mmPerPixel; % 6/tiffImg.mmPerPixel;
+options.defaultValue = nan;
 
-% Get indices for data in the 2-4% range
+% Decimate data using the mean of the data in the 2-4% range
     function v = reductionMethod(x)
         prct = prctile(x,[2,4]);
         v = mean(x(x>=prct(1) & x<=prct(2)));
@@ -106,9 +118,9 @@ S = TiffImg.decimate_and_smooth(x, y, I_c, options);
 % however, this is quite slow to evaluate, so reinterplate onto the same
 % square grid used to define the background surface.
 fun = scatteredInterpolant(double(S.X),double(S.Y),double(S.Z));
-xg = tiffImg.BG_smooth.x;
-yg = tiffImg.BG_smooth.y;
-Z = fun({yg,xg})';
+xg = tiffImg.BG_offset.x;
+yg = tiffImg.BG_offset.y;
+Z = fun({xg,yg})';
 
 flatteningSurface.Z = Z;
 flatteningSurface.x = xg;
