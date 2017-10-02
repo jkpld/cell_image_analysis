@@ -96,10 +96,10 @@ classdef (Abstract) ObjectPartitioner < matlab.mixin.Heterogeneous
                 
                 % Normalize area and intensity
                 if ~isempty(obj.Area_Normalizer)
-                    A = A ./ obj.Area_Normalizer(mu(:,1),mu(:,2));
+                    A = obj.Area_Normalizer(A, mu(:,1),mu(:,2));
                 end
                 if ~isempty(obj.Intensity_Normalizer)
-                    iI = iI ./ obj.Intensity_Normalizer(mu(:,1),mu(:,2));
+                    iI = obj.Intensity_Normalizer(iI, mu(:,1),mu(:,2));
                 end
 
                 % Determine objects to attempt partitioning on
