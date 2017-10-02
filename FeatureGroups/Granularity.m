@@ -19,6 +19,12 @@ classdef Granularity < FeatureGroup
     % Compute(I, L) - Compute the granular spectrum from image, I, for each
     % object in label matrix, L.
     %   x = Granularity.Compute(I, L)
+    %
+    % Note: The granular spectrum MUST be post processed. The features
+    % labeled as spectrum elements 1:GranularSpectrumLength must be divided
+    % by the feature labeled as element 0, which is the starting mean.
+    % (Then all values should technically be multiplied by 100, but this is
+    % unnecessary if normalizing the features for machine learning.)
     
     properties (Dependent, SetAccess = protected)
         FeatureNames
@@ -52,7 +58,7 @@ classdef Granularity < FeatureGroup
             BSSz = obj.Options.BackgroundSampleSize;
             SSz = obj.Options.SubSampleSize;
             
-            featList = "E" + string(ESz) + "_" + string(1:L);
+            featList = "E" + string(ESz) + "_" + string(0:L);
             if BSSz ~= 1
                 featList = "B" + string(BSSz) + "_";
             end
@@ -74,8 +80,17 @@ classdef Granularity < FeatureGroup
             %   L : label matrix
             %
             % Output
-            %   x : granular spectrum. N x GranularSpectrumLength, where N
-            %     is the number of objects.
+            %   x : granular spectrum. N x (GranularSpectrumLength+1), 
+            %     where N is the number of objects.
+            %
+            % The granular spectrum MUST be post-processed. The first
+            % column is the starting-object-mean and is not a feature.
+            % Columns 2:end must be divided by the first column, and then
+            % the first column should be removed.
+            % The reason for this post-processing, is that it allows for an
+            % offset intensity to be added to all of the measurments before
+            % dividing by the starting-object-mean. (Note that you cannot
+            % solve for (a-offset)/(b-offset) if you only know (a/b).)
             
             % James Kapaldo
             
@@ -159,18 +174,21 @@ classdef Granularity < FeatureGroup
             % Starting object mean intensity
             Is = single(I); % need single array if on gpu
             startmean = accumarray(L,Is(FG),[N,1],@sum);    clear Is
-            currentmean = startmean;
+%             currentmean = startmean;
             
             % initialize granular spectrum
             if Use_GPU
-                x = gpuArray.zeros(N,GranularSpectrumLength,'single');
+                x = gpuArray.zeros(N,GranularSpectrumLength+1,'single');
             else
-                x = zeros(N,GranularSpectrumLength,'single');
+                x = zeros(N,GranularSpectrumLength+1,'single');
             end
+            
+            % Save initial mean
+            x(:,1) = startmean;
             
             % compute granular spectrum on gpu
             for i = 1:GranularSpectrumLength
-                prevmean = currentmean;
+%                 prevmean = currentmean;
                 ero = imerode_mask(ero,se,notmask);
                 rec = imreconstruct(ero,I,4);
                 
@@ -182,12 +200,13 @@ classdef Granularity < FeatureGroup
                     currentmean = accumarray(L,rec(FG),[N,1],@sum);
                 end
                 
-                x(:,i) = prevmean - currentmean;
+%                 x(:,i+1) = prevmean - currentmean;
+                x(:,i+1) = x(:,i) - currentmean;
                 clear rec
             end
             
-            % normalize granular spectrum
-            x = 100*(x ./ startmean);
+%             % normalize granular spectrum
+%             x = 100*(x ./ startmean);
             
             if Use_GPU
                 x = gather(x);
