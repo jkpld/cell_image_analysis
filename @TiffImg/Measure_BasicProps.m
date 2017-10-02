@@ -31,21 +31,14 @@ if isempty(tiffImg.threshold_fun) && ~Use_Mask
 end
 
 try
-    hasBackground = ~isempty(tiffImg.BG_smooth);
-    if hasBackground
-        BG_fun = generateFunction(tiffImg, tiffImg.BG_smooth, tiffImg.BG_Xstripe, true);
-    end
-    hasForeground = ~isempty(tiffImg.FG_Xstripe);
-    if hasForeground       
-        FG_fun = generateFunction(tiffImg, tiffImg.FG_smooth, tiffImg.FG_Xstripe, true);
+    CorrectionFunction = generateCorrectionFunction(tiffImg);
+    ThresholdCorrection_isCurrent = isequal(tiffImg.Threshold_CorrectionsExpression, tiffImg.Current_Image_Correction_Expression);
+    
+    if tiffImg.Threshold_After_Correction && ~ThresholdCorrection_isCurrent
+        Threshold_Correction = generateFunctionFromExpression(tiffImg, tiffImg.Threshold_CorrectionsExpression, true);
     end
     
-    backgroundFirst = hasBackground && tiffImg.Threshold_After_Background;
-    backgroundAfter = hasBackground && ~tiffImg.Threshold_After_Background;
-    foregroundFirst = hasForeground && tiffImg.Threshold_After_Background;
-    foregroundAfter = hasForeground && ~tiffImg.Threshold_After_Background;
-    
-    if backgroundFirst && foregroundFirst && ~Use_Mask
+    if tiffImg.Threshold_After_Correction && ~Use_Mask
         threshold = median(tiffImg.threshold.Z(:));
     end
     
@@ -82,40 +75,31 @@ try
             
             if Use_Mask
                 BW = getBlock(object_mask, blck_x, blck_y);
-                
+
                 if tiffImg.Use_GPU
                     BW = gpuArray(BW);
                 end
                 
-                if hasBackground
-                    Is = Is - BG_fun(x,y);
-                end
-                if hasForeground
-                    Is = Is ./ FG_fun(x,y);
-                end
+                % apply image corrections
+                Is = CorrectionFunction(Is,x,y);
             else
                 % Get threshold for block.
-                if ~backgroundFirst || ~foregroundFirst
+                if ~tiffImg.Threshold_After_Correction
                     threshold = tiffImg.threshold_fun(x,y);
                 end
 
-                % Get the foreground mask
-                % - erode the foreground mask so that it is farther away from
-                % the background
-                if backgroundFirst
-                    Is = Is - BG_fun(x,y);
-                end
-                if foregroundFirst
-                    Is = Is ./ FG_fun(x,y);
-                end
-
-                BW = Is > threshold;
-
-                if backgroundAfter
-                    Is = Is - BG_fun(x,y);
-                end
-                if foregroundAfter
-                    Is = Is ./ FG_fun(x,y);
+                % Apply corrections if before threshold
+                if tiffImg.Threshold_After_Correction
+                    if ThresholdCorrection_isCurrent
+                        Is = CorrectionFunction(Is,x,y);
+                        BW = Is > threshold;
+                    else
+                        BW = Threshold_Correction(Is,x,y) > threshold;
+                        Is = CorrectionFunction(Is,x,y);
+                    end
+                else
+                    BW = Is > threshold;
+                    Is = CorrectionFunction(Is,x,y);
                 end
             end
             

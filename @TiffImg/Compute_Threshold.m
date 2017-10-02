@@ -1,15 +1,12 @@
-function th = Compute_Threshold(tiffImg, removeBackgroundFirst, removeForegroundFirst)
+function th = Compute_Threshold(tiffImg, applyCorrectionsFirst)
 % COMPUTE_THRESHOLD Compute the image threshold in each block of the image.
 %
 % threshold = Compute_Threshold(tiffImg, removeBackgroundFirst, removeForegroundFirst)
 %
 % Input
-%   removeBackgroundFirst : logical flag. If true, and if the TiffImg has a
-%     Background, then the background will be removed (subtracted away)
-%     before computing the image threshold. (Default, false)
-%   removeForegroundFirst : logical flag. If true, and if the TiffImg has a
-%     Foreground, then the foreground will be removed (divided out) before
-%     computing the image threshold. (Default, false)
+%   applyCorrectionsFirst : logical flag. If true, and then the image will
+%     be corrected using the Current_Image_Correction_Expression before
+%     computing the threshold
 %
 % Output
 %   threshold : Matrix giving the smoothed threshold computed accross the
@@ -22,23 +19,16 @@ function th = Compute_Threshold(tiffImg, removeBackgroundFirst, removeForeground
 % James Kapaldo
 
 if nargin < 2
-    removeBackgroundFirst = false;
-end
-if nargin < 3
-    removeForegroundFirst = false;
+    applyCorrectionsFirst = false;
 end
 
 try
     threshold = zeros(tiffImg.numBlcks,tiffImg.workingClass);
-    removeBackgroundFirst = removeBackgroundFirst && ~isempty(tiffImg.BG_smooth);
-    removeForegroundFirst = removeForegroundFirst && ~isempty(tiffImg.FG_smooth);
-    if removeBackgroundFirst
-        BG_fun = generateFunction(tiffImg, tiffImg.BG_smooth, tiffImg.BG_Xstripe, true);
-    end
-    if removeForegroundFirst
-        FG_fun = generateFunction(tiffImg, tiffImg.FG_smooth, tiffImg.FG_Xstripe, true);
-    end
     
+    if applyCorrectionsFirst
+        CorrectionFunction = generateCorrectionFunction(tiffImg);
+    end
+        
     progress = displayProgress(tiffImg.numBlcks(2),'number_of_displays', 15,'active',tiffImg.Verbose,'name','Computing threshold,');
     progress.start();
     
@@ -63,11 +53,8 @@ try
             end
             
             % Remove background
-            if removeBackgroundFirst
-                I = I - BG_fun(x,y);
-            end
-            if removeForegroundFirst
-                I = I ./ FG_fun(x,y);
+            if applyCorrectionsFirst
+                I = CorrectionFunction(I,x,y);
             end
 
             % Compute threshold
@@ -88,16 +75,17 @@ try
     threshold = smoothSurf(tiffImg, threshold);
     
     % Save output for later reference
-    tiffImg.threshold = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',threshold,'removeBackgroundFirst',removeBackgroundFirst);
+    tiffImg.threshold = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',threshold,'applyCorrectionsFirst',applyCorrectionsFirst);
     
     % Create function for internally evaluating the threshold in other
     % functions.
-    tiffImg.threshold_fun = generateFunction(tiffImg, threshold);
+    tiffImg.threshold_fun = interpolator2d(tiffImg.threshold.x,tiffImg.threshold.y,tiffImg.threshold.Z);
     
-    % Modify a flags letting other functions know if they need to apply the
-    % threshold after the background correction and foreground correction.
-    tiffImg.Threshold_After_Background = removeBackgroundFirst;
-    tiffImg.Threshold_After_Foreground = removeForegroundFirst;
+    % Modify a flag letting other functions know if they need to apply the
+    % threshold after the image correction.
+    tiffImg.Threshold_After_Correction = applyCorrectionsFirst;
+    % Save the current correction expression
+    tiffImg.Threshold_CorrectionsExpression = tiffImg.Current_Image_Correction_Expression;
     
     % Output the threshold matrix if requested.
     if nargout > 0

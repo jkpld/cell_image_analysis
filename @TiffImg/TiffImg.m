@@ -12,23 +12,43 @@ classdef TiffImg < matlab.mixin.Copyable
         % smoothing the surfaces computed (threshold, background,
         % foreground). If set to NaN, then smoothing will be disabled.
         Surface_Smoothing_Radius(1,1) double = NaN;
+        
+        % Image_Correction_Expression : The expression used to correct the
+        % image. Valid variable names are
+        %    S : The input image           
+        %    BG_o : A background offset (BG_offset) that is added or
+        %      subtracted
+        %    BG_f : A background factor (BG_factor) that is multiplied or
+        %      divided
+        %    BG_s : A background x stripe (BG_stripeX) that is multiplied
+        %      or divided
+        %    FG_o : A foreground offset (FG_offset) that is added or
+        %      subtracted
+        %    FG_f : A foreground factor (FG_factor) that is multiplied or
+        %      divided
+        %    FG_s : A foreground x stripe (FG_stripeX) that is multiplied 
+        %      or divided
+        %
+        %  If BG_offset or FG_offset have not been assigned to the
+        %  TiffImg yet, but they show up in the expression, they are
+        %  replaced with 0's.
+        %  If BG_factor, FG_factor, BG_stripeX, or FG_stripeX have not
+        %  been assigned to the TiffImg yet, but they show up in the
+        %  epxression, they are replaced with 1's.
+        %
+        %   Example expression (this is also the default expression):
+        %    (S - BG_o * BG_s + FG_o) / (FG_s * FG_f)
+        Image_Correction_Expression(1,1) string {validateExpression(Image_Correction_Expression,"S")} = "(S - BG_o*BG_s) / (FG_s*FG_f)"
+        
+        
+        ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression(1,1) string {validateExpression} = "FG_o"
     end
-    properties 
-        threshold = []
-
-        BG_smooth = []
-        BG_Xstripe = []
-
-        FG_smooth = []
-        FG_Xstripe = []
-
-        Sharpness = []
+    properties (Dependent)
+        Current_Image_Correction_Expression
     end
-
+    
     properties (SetAccess = private)
         FileName
-        FileID
-        
         mmPerPixel
         
         workingClass
@@ -41,6 +61,8 @@ classdef TiffImg < matlab.mixin.Copyable
         numTiles
     end
     properties (SetAccess = private, Hidden)
+        FileID
+        
         maxSampleValue
         tiles
         xEdges
@@ -51,11 +73,32 @@ classdef TiffImg < matlab.mixin.Copyable
         tile_x_inds
         blck_y_inds
         blck_x_inds
-    end
-    properties (SetAccess = private)
+
         threshold_fun = []
-        Threshold_After_Background(1,1) logical = false;
-        Threshold_After_Foreground(1,1) logical = false;
+        Threshold_After_Correction(1,1) logical = false;
+        Threshold_CorrectionsExpression;
+    end
+    
+    properties 
+        threshold = []
+
+        % old props
+%         BG_smooth = []
+%         BG_Xstripe = [] % this multiplies the BG_offset
+%         FG_smooth = []
+%         FG_Xstripe = [] % this multiplies the FG_factor
+        
+        % new props
+%         BG_factor = []
+        BG_offset = []
+        BG_stripeX = []
+        
+        FG_offset = [] % to subtract from the foreground
+        FG_factor = [] % to divide the foreground
+        FG_stripeX = []
+        
+
+        Sharpness = []
     end
 
     methods
@@ -183,6 +226,10 @@ classdef TiffImg < matlab.mixin.Copyable
                 obj.FileID = uint64(0);
             end
         end
+        
+        function exprssn = get.Current_Image_Correction_Expression(obj)
+            exprssn = processExpression(obj,obj.Image_Correction_Expression,true,"S");
+        end
 
         function [I,x] = getColumn(obj, col_idx)
             
@@ -258,7 +305,6 @@ classdef TiffImg < matlab.mixin.Copyable
             end
         end
         
-        
         function [I,x,y] = getBlock(obj,blck_x,blck_y)
             tmpB_x_inds = obj.blck_x_inds + (blck_x-1)*obj.tilesPerBlck(2);
             tmpB_y_inds = obj.blck_y_inds + (blck_y-1)*obj.tilesPerBlck(1);
@@ -322,173 +368,6 @@ classdef TiffImg < matlab.mixin.Copyable
             end
         end
         
-        % Functions defined externally
-        Z = smoothSurf(obj,z,type);
-        th = Compute_Threshold(obj, removeBackgroundFirst, removeForegroundFirst);
-        bg = Compute_Background(obj, computeXStripeArtifact, varargin);
-        fg = Compute_Foreground(obj, computeXStripeArtifact, varargin);
-        st = Compute_StripeArtifact(obj, BG_or_FG, varargin)
-        sh = Compute_Sharpness(obj);
-        [x, x_names] = Measure_BasicProps(obj,channelName, varargin);
-        feature = Measure_Intensity(tiffImg, Use_Parallel, varargin)
-        [flatteningSurface, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(tiffImg,x,y,dapi,area,options)
-        
-        function fig = plot(obj,name)
-            % PLOT Plot one of the computed quantities.
-            %
-            % fig = tiffImg.plot(name)
-            %
-            % Input 
-            %   name : one of the following strings
-            %     'threshold'
-            %     'background'
-            %     'foreground'
-            %     'background_stripe'
-            %     'foreground_stripe'
-            
-            valid = {'threshold','background','foreground','stripe_background','stripe_foreground'};
-            internal_name = {'threshold','BG_smooth','FG_smooth','BG_Xstripe','FG_Xstripe'};
-            idx = find(strncmpi(name, valid, numel(name)));
-
-            if isempty(idx) || (numel(idx) > 1)
-                error('plot:unknownName','The "name" must be an unambigious match to one of the following: \n%s.', string(valid).join(', '))
-            else
-                name = internal_name{idx};
-                name_user = valid{idx};
-            end
-            
-            if isempty(obj.(name))
-                error('plot:undefinedSurface','The %s has not been computed yet. Please compute it before trying to plot it.', name_user);
-            end
-            
-            fg = figure('visible','off');
-            try
-                if idx > 3
-                    % Plot x stripe
-                    x = (1:obj.imageSize(2))*obj.mmPerPixel;
-                    y = obj.(name);
-                    plot(x,y,'Color','y','LineWidth',1)
-                    title(strrep(name_user,'_',' '))
-                    xlabel('x / mm')
-                    ylabel('intensity')
-                    axis tight
-                else
-                    % Plot surface
-                    x = obj.(name).x;
-                    y = obj.(name).y;
-                    Z = obj.(name).Z;
-
-                    if any(size(Z)==1) % need scattered surface
-                        tri = delaunay(x,y);
-                        trisurf(tri,x*obj.mmPerPixel,y*obj.mmPerPixel,Z);
-                    else
-                        surface(x*obj.mmPerPixel, y*obj.mmPerPixel, Z, 'EdgeColor', 'none');
-                    end
-                    title(name_user)
-                    xlabel('x / mm')
-                    ylabel('y / mm')
-                    zlabel('intensity')
-                    colorbar;
-                    axis tight
-                    try
-                        daspect([1,1,range(Z(:))/range(x*obj.mmPerPixel)])
-                    catch
-                    end
-                end
-                setTheme(fg,'dark')
-            catch ME
-                close(fg)
-                rethrow(ME)
-            end
-            fg.Visible = 'on';
-            if nargout > 0
-                fig = fg;
-            end
-        end
-
-        function fun = generateFunction(obj, z_smooth, x_stripe, multiplyStripe)
-            % Create a function handle that can be used to evaluate
-            % f(x,y) =  z_smooth(x,y) + x_stripe(x)
-            %
-            % If multiplyStripe is true, then the the stripe will be
-            % multiplied by the smoothe surface
-            % f(x,y) = z_smooth(x,y) .* x_stripe(x)
-            %
-            % multiplyStripe is false be default
-            %
-            % This function will take in vectors and output a matrix!!
-            % x = [1 x m]
-            % y = [n x 1]
-            % f = [n x m]
-
-            
-            outClass = obj.workingClass;
-            
-
-            if (nargin < 3)
-                x_stripe = [];
-            end
-
-            if isempty(z_smooth)
-                % Just have to evaluate the stripe
-                if isempty(x_stripe)
-                    warning('generateFunction:noInput','There is nothing to create a function from. First compute a surface (threshold, background, foreground, ...)');
-                    fun = @(~,~) 0;
-                    return;
-                end
-
-                fun = @(x,~) x_stripe(x);
-                return;
-            else
-
-                if (nargin < 4)
-                    multiplyStripe = false;
-                end
-
-                if isstruct(z_smooth)
-                    if any(size(z_smooth.Z)==1) % assume data need scattered interpolant
-                        fun_scat = scatteredInterpolant(z_smooth.x,z_smooth.y,double(z_smooth.Z));
-                        smooth_fun = @(x,y) fun_scat({y,x});
-                    else % assume data is gridded
-                        xg = z_smooth.x(:);
-                        yg = z_smooth.y(:);
-                        
-                        z_smooth = double(z_smooth.Z);
-                        
-                        xn = (1:size(z_smooth,2)).';
-                        yn = (1:size(z_smooth,1)).';
-
-                        smooth_fun = @(x,y) interp2mex_wExpand(z_smooth, reshape(nakeinterp1(xg,xn,x(:)),size(x)), reshape(nakeinterp1(yg,yn,y(:)),size(y)));
-                    end
-                else
-                    xg = obj.xCenters(:);
-                    yg = obj.yCenters(:);
-                    xn = (1:size(z_smooth,2)).';
-                    yn = (1:size(z_smooth,1)).';
-                    
-                    z_smooth = double(z_smooth);
-                    
-                    smooth_fun = @(x,y) interp2mex_wExpand(z_smooth, reshape(nakeinterp1(xg,xn,x(:)),size(x)), reshape(nakeinterp1(yg,yn,y(:)),size(y)));
-                end
-
-                if isempty(x_stripe)
-                    fun = @(x,y) cast( smooth_fun(x,y), outClass);
-                else
-                    x_stripe = double(x_stripe); % Ensure double
-                    if multiplyStripe
-                        fun = @(x,y) cast( x_stripe(x) .* smooth_fun(x,y), outClass); % cast final result to same class as image
-                    else
-                        fun = @(x,y) cast( x_stripe(x) + smooth_fun(x,y), outClass); % cast final result to same class as image
-                    end
-                end
-            end
-
-            % Note: interp2mex only performs nearest neighbor extrapolation
-            % outside of the defined limits. Therefore, the half blockSize
-            % on the image boarder could have jagged edges.
-
-        end
-        
         function tiles_xy = computeTileNumbers(obj,bboxes)
             % COMPUTETILENUMBERS Compute the tile numbers that contain the
             % bounding boxes given.
@@ -513,6 +392,384 @@ classdef TiffImg < matlab.mixin.Copyable
             % x,y tile numbers, 0 based
             tiles_xy = ceil(bboxes ./ [obj.tileSize,obj.tileSize]) - 1;
         end
+        
+        Z = smoothSurf(obj,z,type);
+        
+        th = Compute_Threshold(obj, applyCorrectionsFirst);
+        
+        bg = Compute_Background(obj, computeXStripeArtifact, varargin);
+        
+        fg = Compute_Foreground(obj, computeXStripeArtifact, varargin);
+        
+        st = Compute_StripeArtifact(obj, BG_or_FG, varargin);
+        
+        sh = Compute_Sharpness(obj);
+        
+        [x, x_names] = Measure_BasicProps(obj,channelName, varargin);
+        
+        feature = Measure_Intensity(tiffImg, Use_Parallel, varargin);
+        
+        [FG, BG, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(tiffImg,x,y,dapi,area,options);
+        
+        function fig = plot(obj,name)
+            % PLOT Plot one of the computed quantities.
+            %
+            % fig = tiffImg.plot(name)
+            %
+            % Input 
+            %   name : one of the following strings
+            %     'threshold'
+            %     'background'
+            %     'foreground'
+            %     'background_stripe'
+            %     'foreground_stripe'
+            
+            valid = {'threshold','background','foreground_factor','foreground_offset','sharpness','stripe_background','stripe_foreground'};
+            internal_name = {'threshold','BG_offset','FG_factor','FG_offset','Sharpness','BG_stripeX','FG_stripeX'};
+            idx = find(strncmpi(name, valid, numel(name)));
+
+            if isempty(idx) || (numel(idx) > 1)
+                error('plot:unknownName','The "name" must be an unambigious match to one of the following: \n%s.', string(valid).join(', '))
+            else
+                name = internal_name{idx};
+                name_user = valid{idx};
+            end
+            
+            if isempty(obj.(name))
+                error('plot:undefinedSurface','The %s has not been computed yet. Please compute it before trying to plot it.', name_user);
+            end
+            
+            fg = figure('visible','off');
+            try
+                if idx > 5
+                    % Plot x stripe
+                    x = (1:obj.imageSize(2))*obj.mmPerPixel;
+                    y = obj.(name);
+                    plot(x,y,'Color','y','LineWidth',1)
+                    title(strrep(name_user,'_',' '))
+                    xlabel('x / mm')
+                    ylabel('intensity')
+                    axis tight
+                else
+                    % Plot surface
+                    x = obj.(name).x;
+                    y = obj.(name).y;
+                    Z = obj.(name).Z;
+
+                    if any(size(Z)==1) % need scattered surface
+                        tri = delaunay(x,y);
+                        trisurf(tri,x*obj.mmPerPixel,y*obj.mmPerPixel,Z);
+                    else
+                        surface(x*obj.mmPerPixel, y*obj.mmPerPixel, Z, 'EdgeColor', 'none');
+                    end
+                    title(strrep(name_user,'_',' '))
+                    xlabel('x / mm')
+                    ylabel('y / mm')
+                    zlabel('intensity')
+                    colorbar;
+                    axis tight
+                    try
+                        daspect([1,1,range(Z(:))/range(x*obj.mmPerPixel)])
+                    catch
+                    end
+                end
+                setTheme(fg,'dark')
+            catch ME
+                close(fg)
+                rethrow(ME)
+            end
+            fg.Visible = 'on';
+            if nargout > 0
+                fig = fg;
+            end
+        end
+
+        function fun = generateFunction(obj,expression,removeUndefined,expandInput,requiredVars)
+            % GENERATEFUNCTION Create a function that operates on an image
+            % based on a string expression
+            %
+            % fun = generateFunction(obj,expression,expandInput)
+            %
+            % Input
+            %   expression : A string expression, that follows that same
+            %     requirments as Image_Correction_Expression
+            %   removeUndefined : Logical flag. If true, then any
+            %     not-yet-defined variables will be removed from the
+            %     expression. If false, then if there are any
+            %     not-yet-defined variables in the expression, an error
+            %     will be issued.
+            %   expandInput : Logical flag. If true, then the input arrays
+            %     to evaluate the correction function at, xi and yi, are
+            %     expanded to form a matrix of size size(yi,1) x
+            %     size(xi,2). If false, then the input arrays are not
+            %     expanded, and the output is size(xi). Default value is
+            %     true.
+            %   requiredVars : (optional) A string array listing inputs
+            %     required to show up in the expression. Default is none,
+            %     []. These are the first elements to the function handle.
+            %     Examples: requiredVars = ["S"] -> @(S,x,y). requiredVars
+            %     = ["S","A"] -> @(S,A,x,y). requiredVars = {} -> @(x,y)
+            %
+            % Ouput 
+            %   fun : A function handle with three inputs (S,xi,yo). S is
+            %     the image to evaluate on, xi and yi are the pixel values
+            %     of the image.
+            %
+            % Example call
+            %   img_corrected = fun(img,xi,yi);
+            
+            if isempty(expression) || expression == ""
+                fun = [];
+                return;
+            end
+            
+            if nargin < 5
+                requiredVars = "";
+            end
+            
+            % Process the expression
+            exprssn = processExpression(obj,expression,removeUndefined,requiredVars);
+            
+            % Generate the function
+            fun = generateFunctionFromExpression(obj, exprssn, expandInput, requiredVars);
+        end
+        
+        function fun = generateCorrectionFunction(obj, expandInput)
+            % GENERATECORRECTIONFUNCITON Create function handle to apply
+            % the Current_Image_Correction_Expression
+            %
+            % fun = generateCorrectionFunction(obj)
+            % fun = generateCorrectionFunction(obj, expandInput)
+            %
+            % Input
+            %   expandInput : (optional) Logical flag. If true, then the
+            %     input arrays to evaluate the correction function at, xi
+            %     and yi, are expanded to form a matrix of size size(yi,1)
+            %     x size(xi,2). If false, then the input arrays are not
+            %     expanded, and the output is size(xi). Default value is
+            %     true.
+            %
+            % Ouput 
+            %   fun : A function handle with three inputs (S,xi,yo). S is
+            %     the image to evaluate on, xi and yi are the pixel values
+            %     of the image.
+            %
+            % Example call
+            %   img_corrected = fun(img,xi,yi);
+            
+            
+            if nargin < 2
+                expandInput = true;
+            else
+                expandInput = logical(expandInput(1));
+            end
+            
+            fun = generateFunctionFromExpression(obj, obj.Current_Image_Correction_Expression, expandInput, "S");
+        end
+        
+        function clearCorrections(t)
+            t.BG_offset = [];
+            t.BG_stripeX = [];
+            t.FG_offset = [];
+            t.FG_factor = [];
+            t.FG_stripeX = [];
+        end
+    end
+    
+    methods (Access = private, Hidden)
+        function fun = generateFunctionFromExpression(obj, expression, expandInput, requiredVars)
+            % GENERATECORRECTIONFUNCITON Create function handle to apply
+            % the Current_Image_Correction_Expression
+            %
+            % fun = generateCorrectionFunction(obj)
+            % fun = generateCorrectionFunction(obj, Name1, Value1, ...)
+            %
+            % Input
+            %   expression : Cell array where the first element is the
+            %     string expression and the second element is the list of
+            %     variables in the expression.
+            %   expandInput : (optional) Logical flag. If true, then the 
+            %     input arrays to evaluate the correction function at, xi
+            %     and yi, are expanded to form a matrix of size size(yi,1)
+            %     x size(xi,2). If false, then the input arrays are not
+            %     expanded, and the output is size(xi). Default value is
+            %     true.
+            %
+            % Ouput 
+            %   fun : A function handle with three inputs (S,xi,yo). S is
+            %     the image to evaluate on, xi and yi are the pixel values
+            %     of the image.
+            %
+            % Example call
+            %   img_corrected = fun(img,xi,yi);
+            
+            if nargin < 3
+                expandInput = true;
+            else
+                expandInput = logical(expandInput(1));
+            end
+            
+            currentVars = expression{2};
+            currentExpr = expression{1};
+
+            intpl1d = @(x,y,xi) cast(nakeinterp1(double(x(:)), double(y(:)), double(xi(:))),'like',y);
+            
+            % Create the functions for the current expression
+            for i = 1:numel(currentVars)
+                switch currentVars{i}
+                    case 'BG_o'
+                        BG_o = interpolator2d(obj.BG_offset.x, obj.BG_offset.y, obj.BG_offset.Z, expandInput); %#ok<NASGU>
+%                     case 'BG_f'
+%                         BG_f = interpolator2d(obj.BG_factor.x, obj.BG_factor.y, obj.BG_factor.Z, expandInput); %#ok<NASGU>
+                    case 'BG_s'
+                        xd = (1:obj.imageSize(2)).';
+                        if expandInput
+                            BG_s = @(x) reshape(intpl1d(xd,obj.BG_stripeX,x),size(x)); %#ok<NASGU>
+                        else
+                            BG_s = @(x) intpl1d(xd,obj.BG_stripeX,x); %#ok<NASGU>
+                        end
+                    case 'FG_o'
+                        FG_o = interpolator2d(obj.FG_offset.x, obj.FG_offset.y, obj.FG_offset.Z, expandInput); %#ok<NASGU>
+                    case 'FG_f'
+                        FG_f = interpolator2d(obj.FG_factor.x, obj.FG_factor.y, obj.FG_factor.Z, expandInput); %#ok<NASGU>
+                    case 'FG_s'
+                        xd = (1:obj.imageSize(2)).';
+                        if expandInput
+                            FG_s = @(x) reshape(intpl1d(xd,obj.FG_stripeX,x),size(x)); %#ok<NASGU>
+                        else
+                            FG_s = @(x) intpl1d(xd,obj.FG_stripeX,x); %#ok<NASGU>
+                        end
+                    case cellstr(requiredVars)
+                    otherwise
+                        error('createEvaluator:unknownVar','There is an unknown variable. If you see this error, then the createEvaluator() function is out of sync with the validateExpression() and get.Current_Image_Correction_Expression() functions.')
+                end
+            end
+            
+            % Evaluate the current expression and output the resulting
+            % function handle.
+            
+            fun = eval(currentExpr);
+        end
+        
+        function exprssn = processExpression(obj,expression,removeUndefined,requiredVars)
+            % PROCESSEXPRESSION Process an expression an output a
+            % processed (and, if requested, simplified) expression with the
+            % list of variables in the expression.
+            %
+            % fun = processExpression(obj,expression,removeUndefined)
+            %
+            % Input
+            %   expression : A string expression, that follows that same
+            %     requirments as Image_Correction_Expression
+            %   removeUndefined : Logical flag. If true, then any
+            %     not-yet-defined variables will be removed from the
+            %     expression. If false, then if there are any
+            %     not-yet-defined variables in the expression, an error
+            %     will be issued.
+            %   requiredVars : (Optional). A string array of variable inputs
+            %     that are required to appear as inputs. These are the
+            %     first elements to the function handle. Examples:
+            %     requiredVars = {"S"} -> @(S,x,y). requiredVars =
+            %     {"S","A"} -> @(S,A,x,y). requiredVars = {} -> @(x,y)
+            %
+            % Ouput 
+            %   exprssn : A 1 x 2 cell array where the first element is the
+            %     processed expression and the second element is the list
+            %     of variables.
+            %
+            %
+            % Example:
+            %   input expression = "S - BG_o * BG_s"
+            %   input removeUndefined = true;
+            %
+            %   (Assume BG_s has not been defined)
+            %
+            %   output exprssn = {"@(S,x,y) S - BG_o(x,y)", ["S","BG_o"]}
+            
+            if nargin < 4
+                requiredVars = "";
+            end
+            
+            % Validate expression
+            validateExpression(expression,requiredVars);
+            requiredVars = requiredVars(requiredVars~="");
+
+            exprssn = str2sym(char(expression));
+            
+            % Get a list of the variables in the expression
+            vars = string(symvar(char(expression)))';
+
+            % If a variable from the expression has not been defined, then
+            % throw and error.
+            % names = {'BG_offset','BG_factor','BG_stripeX','FG_offset','FG_factor','FG_stripeX'};
+            names = {'BG_offset','BG_stripeX','FG_offset','FG_factor','FG_stripeX'};
+            for i = 1:numel(vars)
+                if contains(vars(i),requiredVars)
+                    continue;
+                else
+                    idx = startsWith(names,vars(i));
+                    if isempty(obj.(names{idx}))
+                        if removeUndefined
+                            % variable name
+                            name = names{idx}(1:4); 
+                            if strcmp(name(4),'o')
+                                % If an offset, then replace with 0
+                                exprssn = subs(exprssn,name,0);
+                            else
+                                % If a factor, then replace with 1
+                                exprssn = subs(exprssn,name,1);
+                            end
+                        else
+                            error('generateFunction:missingVariable','The property, %s, has not been defined yet.', names{idx})
+                        end
+                    end
+                end
+            end
+            
+            % Get an updated list of the variables in the expression if
+            % necessary
+            if removeUndefined
+                vars = string(symvar(char(exprssn)))';
+            end
+            
+            % Convert to symbolic expression and back to string, to make
+            % sure that the expression is valid.
+            exprssn = string(exprssn);
+            
+            % Vectorize the expression
+            exprssn = vectorize(exprssn);
+
+            % Iterate over each variable still in the expression and
+            % add the function inputs
+            for i = 1:numel(vars)
+                if contains(vars(i),requiredVars)
+                    
+                    continue;
+                else
+                    if endsWith(vars(i),'s')
+                        exprssn = strrep(exprssn,vars(i),vars(i) + '(x)');
+                    else
+                        exprssn = strrep(exprssn,vars(i),vars(i) + '(x,y)');
+                    end
+                end
+            end
+            
+            % Tack on the function handle head
+            if contains(exprssn,"x")
+                hasX = "x";
+            else
+                hasX = "~";
+            end
+            if contains(exprssn,"y")
+                hasY = "y";
+            else
+                hasY = "~";
+            end
+            exprssn = "@(" + join([string(requiredVars),hasX,hasY],',') + ")" + exprssn;
+            
+            % Output the expression and variables as a cell array
+            exprssn = {exprssn, vars};
+        end
     end
     
     methods (Static)
@@ -521,3 +778,28 @@ classdef TiffImg < matlab.mixin.Copyable
         [S,fun] = decimate_and_smooth(x,y,z,op);
     end
 end % class
+
+function validateExpression(exprssn,requiredVars)
+vars = string(symvar(char(exprssn)));
+
+if nargin < 2
+    requiredVars = "";
+end
+
+if any(requiredVars == "I")
+    error('validateExpression:invalidVariableName','The varialbe "I" cannot be used')
+end
+
+% validVars = ["S","BG_o","BG_f","BG_s","FG_o","FG_f","FG_s"];
+validVars = [requiredVars, "BG_o","BG_s","FG_o","FG_f","FG_s"];
+if ~all(ismember(vars,validVars))
+    error('validateExpression:invalidVars','Expression can only contain the variables %s.', join(validVars,', '))
+end
+if nargin > 1 && requiredVars ~= ""
+    for i = 1:numel(requiredVars)
+        if ~ismember(requiredVars(i),vars)
+            error('validateExpression:missingS','The variable %s must appear in the expression!', requiredVars(i))
+        end
+    end
+end
+end

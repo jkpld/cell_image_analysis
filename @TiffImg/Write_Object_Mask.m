@@ -54,17 +54,16 @@ try
             [tifflib('getField',t_ID,Tiff.TagID.ImageDescription),'|imageMask']);
     
     
-    hasBackground = ~isempty(tiffImg.BG_smooth);
-    if hasBackground
-        BG_fun = generateFunction(tiffImg, tiffImg.BG_smooth, tiffImg.BG_Xstripe, true);
+    CorrectionFunction = generateCorrectionFunction(tiffImg);
+    ThresholdCorrection_isCurrent = isequal(tiffImg.Threshold_CorrectionsExpression, tiffImg.Current_Image_Correction_Expression);
+    
+    if tiffImg.Threshold_After_Correction && ~ThresholdCorrection_isCurrent
+        Threshold_Correction = generateFunctionFromExpression(tiffImg, tiffImg.Threshold_CorrectionsExpression, true);
     end
-    hasForeground = ~isempty(tiffImg.FG_Xstripe);
-    if hasForeground       
-        FG_fun = generateFunction(tiffImg, tiffImg.FG_smooth, tiffImg.FG_Xstripe, true);
+    
+    if tiffImg.Threshold_After_Correction
+        threshold = median(tiffImg.threshold.Z(:));
     end
-
-    backgroundFirst = hasBackground && tiffImg.Threshold_After_Background;
-    foregroundFirst = hasForeground && tiffImg.Threshold_After_Background;
     
     % Only need to do corrections afterwards if the partitioner needs the
     % image
@@ -72,12 +71,6 @@ try
         partitioner.Restricted_Partitioning && ...
         (~isempty(partitioner.Area_Normalizer) || ...
         ~isempty(partitioner.Intensity_Normalizer));
-    backgroundAfter = hasBackground && ~tiffImg.Threshold_After_Background && partitionerNeedsImage;
-    foregroundAfter = hasForeground && ~tiffImg.Threshold_After_Background && partitionerNeedsImage;
-
-    if backgroundFirst && foregroundFirst
-        threshold = median(tiffImg.threshold.Z(:));
-    end
     
     progress = displayProgress(tiffImg.numBlcks(2),'number_of_displays', 15,'active',tiffImg.Verbose, 'name', 'Writing object mask,');
     progress.start();
@@ -94,7 +87,7 @@ try
             [I,x,y] = getBlock(tiffImg,blck_x,blck_y);
             
             % Get threshold for block.
-            if ~backgroundFirst || ~foregroundFirst
+            if ~tiffImg.Threshold_After_Correction
                 threshold = tiffImg.threshold_fun(x,y);
             end
 
@@ -108,20 +101,24 @@ try
             % Get the foreground mask
             % - erode the foreground mask so that it is farther away from
             % the background
-            if backgroundFirst
-                Is = Is - BG_fun(x,y);
-            end
-            if foregroundFirst
-                Is = Is ./ FG_fun(x,y);
-            end
-            
-            BW = Is > threshold;
-            
-            if backgroundAfter
-                Is = Is - BG_fun(x,y);
-            end
-            if foregroundAfter
-                Is = Is ./ FG_fun(x,y);
+            % Get threshold for block.
+
+            % Apply corrections if before threshold
+            if tiffImg.Threshold_After_Correction
+                if ThresholdCorrection_isCurrent
+                    Is = CorrectionFunction(Is,x,y);
+                    BW = Is > threshold;
+                else
+                    BW = Threshold_Correction(Is,x,y) > threshold;
+                    if partitionerNeedsImage
+                        Is = CorrectionFunction(Is,x,y);
+                    end
+                end
+            else
+                BW = Is > threshold;
+                if partitionerNeedsImage
+                    Is = CorrectionFunction(Is,x,y);
+                end
             end
             
             % Take arrays off gpu before passing to partitioner

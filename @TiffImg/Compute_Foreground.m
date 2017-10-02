@@ -16,7 +16,7 @@ function fg = Compute_Foreground(tiffImg, computeXStripeArtifact, varargin)
 % Output
 %   foreground : Matrix giving the smoothed foreground computed accross the
 %     image. Even if no output is requested the foreground is still stored
-%     to the tiffImg object.
+%     to the tiffImg object as FG_factor.
 %
 % Note : Computing the foreground requires that the image threshold has
 % already been calculated. The foreground is calculated by first
@@ -43,10 +43,7 @@ if isempty(tiffImg.threshold_fun) && ~Use_Mask
 end
 
 try
-    hasBackground = ~isempty(tiffImg.BG_smooth);
-    if hasBackground
-        BG_fun = generateFunction(tiffImg, tiffImg.BG_smooth, tiffImg.BG_Xstripe, true);
-    end
+    CorrectionFunction = generateCorrectionFunction(tiffImg);
     
     FG = zeros(tiffImg.numBlcks, tiffImg.workingClass);
     seD2 = strel('diamond',2);
@@ -74,6 +71,9 @@ try
             Is = imfilter(I, tiffImg.Image_Smooth_Kernel, 'symmetric'); clear I
             
             if Use_Mask
+                % Get the foreground mask
+                % - erode the foreground mask so that it is farther away from
+                % the background
                 BWo = getBlock(object_mask, blck_x, blck_y);
                 
                 if tiffImg.Use_GPU
@@ -82,31 +82,17 @@ try
                 
                 BW = imerode(BWo, seD2); clear BWo
                 
-                if hasBackground
-                    BG = BG_fun(x,y);
-                    Is = Is - BG; clear BG
-                end
+                % apply image corrections
+                Is = CorrectionFunction(Is,x,y);
             else
-                
                 % Get threshold for block.
                 threshold = tiffImg.threshold_fun(x,y);
 
                 % Get the foreground mask
-                % - erode the foreground mask so that it is farther away from
-                % the background
-                if hasBackground
-                    BG = BG_fun(x,y);
-
-                    if tiffImg.Threshold_After_Background
-                        Is = Is - BG; clear BG
-                        BW = imerode(Is > threshold, seD2);
-                    else
-                        BW = imerode(Is > threshold, seD2);
-                        Is = Is - BG; clear BG
-                    end
-                else
-                    BW = imerode(Is > threshold, seD2);
-                end
+                BW = imerode(Is > threshold, seD2);
+                
+                % apply any corrections (like removing background)
+                Is = CorrectionFunction(Is,x,y);
             end
             
             % Get the median background intensity
@@ -131,7 +117,7 @@ try
     FG = smoothSurf(tiffImg, FG);
     
     % Save output for later reference
-    tiffImg.FG_smooth = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',FG);
+    tiffImg.FG_factor = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',FG);
     
     if computeXStripeArtifact
         Compute_StripeArtifact(tiffImg,'f', 'Object_Mask', object_mask);
@@ -141,8 +127,7 @@ try
     if nargout > 0
         fg = FG;
     end
-    
-    
+
 catch ME
     tiffImg.close();
     if Use_Mask, object_mask.close(); end

@@ -16,7 +16,7 @@ function bg = Compute_Background(tiffImg, computeXStripeArtifact, varargin)
 % Output
 %   background : Matrix giving the smoothed background computed accross the
 %     image. Even if no output is requested the background is still stored
-%     to the tiffImg object.
+%     to the tiffImg object as BG_offset.
 %
 % Note : Computing the background requires that the image threshold has
 % already been calculated. The background is calculated by first
@@ -78,15 +78,11 @@ try
             else
                 % Get threshold for block.
                 threshold = tiffImg.threshold_fun(x,y);
-
-                if tiffImg.Use_GPU
-                    threshold = gpuArray(threshold);
-                end               
-
+                
                 % Get the background mask
                 % - erode the background mask so that it is farther away from
                 % the objects
-                BW = imerode(Is < threshold, seD2); clear threshold
+                BW = imerode(Is < threshold, seD2);
             end
             
             % Get the median background intensity
@@ -111,7 +107,7 @@ try
     BG = smoothSurf(tiffImg, BG);
     
     % Save background
-    tiffImg.BG_smooth = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',BG);
+    tiffImg.BG_offset = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',BG);
     
     if computeXStripeArtifact
         Compute_StripeArtifact(tiffImg,'b', 'Object_Mask', object_mask);
