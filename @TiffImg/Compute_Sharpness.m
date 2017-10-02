@@ -17,14 +17,10 @@ function sh = Compute_Sharpness(tiffImg)
 
 % James Kapaldo
 
-try
-    if tiffImg.Verbose
-        fprintf('Starting sharpness calculation...\n');
-    end
+try   
+    sharp = zeros(tiffImg.numBlcks, tiffImg.workingClass);
     
-    sharp = zeros(tiffImg.numBlcks, obj.imageClass);
-    
-    progress = displayProgress(tiffImg.numBlcks(2),'number_of_displays', 15,'active',tiffImg.Verbose);
+    progress = displayProgress(tiffImg.numBlcks(2),'number_of_displays', 15,'active',tiffImg.Verbose, 'name', 'Computing image sharpness,');
     progress.start();
     
     % Iterate over x blocks
@@ -65,14 +61,10 @@ try
     end % x block
     
     % Smooth the sharpness surface
-    sharp = smoothSurface(tiffImg, sharp);
+    sharp = smoothSurf(tiffImg, sharp);
     
     % Save output for later reference
     tiffImg.Sharpness = struct('x',tiffImg.xCenters,'y',tiffImg.yCenters,'Z',sharp);
-    
-    if tiffImg.Verbose
-        fprintf('Sharpness calculation finished.\n');
-    end
     
     % Output the sharpness matrix if requested.
     if nargout > 0
