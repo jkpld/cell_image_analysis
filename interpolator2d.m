@@ -1,29 +1,44 @@
 function fun = interpolator2d(varargin)
 
-charInput = cellfun(@ischar, varargin);
-numCharInput = sum(charInput);
+%
+% fun = interpolator2d(Z)
+% fun = interpolator2d(Z, expand)
+% fun = interpolator2d(x, y, Z)
+% fun = interpolator2d(x, y, Z, expand)
+%
+% Z : 2d matrix size (n x m)
+% x : vector, numel(x) = m
+% y : vector, numel(y) = n
+% expand : logical. if true, then fun(xi,yi) will be matrix (size(yi,1) x
+%   size(xi,2)), otherwise will be array (numel(xi) x 1). (default value is
+%   true)
+%
+% output class is same as Z
 
-createGrid = contains(varargin(charInput), 'expand');
-interpolateInputPoints = true;
 
-if nargin - numCharInput == 1
-    Z = varargin{1};
-    interpolateInputPoints = false;
-    
-elseif nargin - numCharInput == 3
-    x = varargin{1};
-    y = varargin{2};
-    Z = varargin{3};
-    if numel(x) ~= size(Z,2) || numel(y) ~= size(Z,1)
-        error('interpolator2d:badVectorSizes', 'Vector x and y should have size(Z,2) and size(Z,1) number of elements, respectively.')
-    end
-    x = x(:);
-    y = y(:);
-else
-    error('interpolator2d:badInput','Function input can be matrix Z; or, it can be vector x, vector y, matrix Z.')
+
+switch nargin
+    case {1,2}
+        Z = varargin{1};
+        interpolateInputPoints = false;
+    case {3,4}
+        x = varargin{1};
+        y = varargin{2};
+        Z = varargin{3};
+        if numel(x) ~= size(Z,2) || numel(y) ~= size(Z,1)
+            error('interpolator2d:badVectorSizes', 'Vector x and y should have size(Z,2) and size(Z,1) number of elements, respectively.')
+        end
+        x = x(:);
+        y = y(:);
+        interpolateInputPoints = true;
+end
+createGrid = true;
+if nargin == 2 || nargin == 4
+    createGrid = logical(varargin{end}(1));
 end
 
-if interpolateInputPoints
+
+if interpolateInputPoints    
     xg = (1:size(Z,2))';
     yg = (1:size(Z,1))';
     
