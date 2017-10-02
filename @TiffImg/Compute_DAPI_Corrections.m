@@ -1,10 +1,9 @@
-function [flatteningSurface, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(tiffImg,x,y,dapi,area,options)
-% COMPUTE_DAPI_CORRECTIONS Compute the smooth surface and X stripe artifact
-% such that when the DAPI data is divided by both of these corrections the
-% G1 and G2 bands are both flat and located at 1 and 2, respectively, and
-% there is not stripe artifact along the x direction.
+function [FG_f, FG_o, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(tiffImg,x,y,dapi,area,options)
+% COMPUTE_DAPI_CORRECTIONS Compute corrections that : will flatten the
+% DAPI G1 band and position the G1 band at 1 and the G2 band at 2, remove
+% the x-stripe artifact, and flatten/normalize the G1 area.
 %
-% [flatteningSurface, Xstripe, G1_areaNorm, G1_idx] = Compute_DAPI_Corrections(x,y,dapi,mmPerPixel)
+% [FG, BG, Xstripe, G1area, G1_idx] = Compute_DAPI_Corrections(tiffImg,x,y,dapi,area,options)
 %
 % Input 
 %   x : spatial x data [pixels]
@@ -14,9 +13,10 @@ function [flatteningSurface, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections
 %   options : (optional) structure with options for decimate_smooth()
 %
 % Output
-%   flatteningSurface : struct with fields x, y, and Z. The smooth surface
-%     that, when the dapi data is divided by, positions the G1 and G2 bands
-%     in the correct positions.
+%   FG_f : struct with fields x, y, and Z. This is a surface that the DAPI
+%     channel should be divided by.
+%   FG_o : struct with fields x, y, and Z. This is the surface that should
+%     be added to the DAPI channel *after* dividing by FG.
 %   Xstripe : The X stripe artifact (1 x imageSize(2)) that, when the dapi
 %     data is divided by, removes the x stripe artifact from the dapi data.
 %   G1Area : struct with fields x, y, and Z. The smooth surface that gives
@@ -68,10 +68,12 @@ end
 
 idx = dapi_c > 0.6 & dapi_c < 1.4; % Get G1 band
 G1_stripe1 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',1); % Get median dapi value from bins 100 pixels wide along x direction
+G1_stripe1.Z = highpass(G1_stripe1.Z(:,2),3,100*tiffImg.mmPerPixel) + 1;
 dapi_c = dapi_c ./ nakeinterp1(G1_stripe1.X(:,1), G1_stripe1.Z(:,1), x); % Divide out the median value
 
 idx = dapi_c > 0.7 & dapi_c < 1.3; % Get G1 band
 G1_stripe2 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',1);  % Get median dapi value from bins 100 pixels wide along x direction
+G1_stripe2.Z = highpass(G1_stripe2.Z(:,2),3,100*tiffImg.mmPerPixel) + 1;
 dapi_c = dapi_c ./ nakeinterp1(G1_stripe2.X(:,1), G1_stripe2.Z(:,1), x); % Divide out the median value
 
 if DEBUG
@@ -101,22 +103,32 @@ dapi_c = dapi_c ./ DAPI_G1_mode(x,y);
 options.reductionMethod = 'median'; % Use median instead of mode as the distribution is not that narrow.
 options.defaultValue = 2;
 
-idx = dapi_c > 1.7 & dapi_c < 2.5;
+idx = dapi_c > 1.7 & dapi_c < 2.6;
 [G2_1, DAPI_G2_mode] = TiffImg.decimate_and_smooth(x(idx), y(idx), dapi_c(idx), options);
-dapi_c = dapi_c ./ (DAPI_G2_mode(x,y)/2); % dapi_c = ((dapi_c-1) ./ (DAPI_G2_mode(x,y)/2)) + 1;
+% dapi_c = dapi_c ./ (DAPI_G2_mode(x,y)/2); % 
+dapi_c = ((dapi_c-1) ./ (DAPI_G2_mode(x,y)/2)) + 1;
+
+
+
+% dapi_norm = dapi / (g2 - g1) - g1 / (g2-g1) + 1
+% FG <-- (g2 - g1)
+% BG <-- BG + 1 - g1/(g2-g1)
+
+
 
 % Remove any stripe artifact from the G2 band. ---------------------------
 
 % Select the g2 band. Compute the median dapi value along small x-slices to
 % extract the stripe. Divide the stripe away.
 
-idx = dapi_c > 1.7 & dapi_c < 2.3;
-G2_stripe = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',2);
-dapi_c = dapi_c ./ (nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x)/2) ;
+% idx = dapi_c > 1.7 & dapi_c < 2.3;
+% G2_stripe = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',2);
+% dapi_c = dapi_c ./ (nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x)/2) ;
 
-idx = dapi_c > 0.7 & dapi_c < 1.3; % Get G1 band
-G1_stripe3 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',1);  % Get median dapi value from bins 100 pixels wide along x direction
-dapi_c = dapi_c ./ nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), x); % Divide out the median value
+% idx = dapi_c > 0.7 & dapi_c < 1.3; % Get G1 band
+% G1_stripe3 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[100,100],'defaultValue',1);  % Get median dapi value from bins 100 pixels wide along x direction
+% G1_stripe3.Z = highpass(G1_stripe3.Z(:,2),2.5,100*tiffImg.mmPerPixel) + 1;
+% dapi_c = dapi_c ./ nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), x); % Divide out the median value
 
 
 if DEBUG
@@ -129,16 +141,26 @@ if DEBUG
     figure
     ax = axes;
     hold on
-    h = histogram(ax,dapi_c,'BinLimits',[0,3]);
+    h = histogram(ax,dapi_c,'BinLimits',[0,6]);
+    grid on
+    setTheme(gcf,'dark')
+    
+    figure
+    hold on
+    plot(G1_stripe1.X(:,1),G1_stripe1.Z(:,1))
+    plot(G1_stripe2.X(:,1),G1_stripe2.Z(:,1))
+    title('X-stripe corrections')
+    grid on
+    setTheme(gcf,'dark')
 end
 
 % Combine all results into a single smooth surface and stripe. -----------
 
 % Interpolate the stripe to all for each x-pixel of the image.
 Xstripe = nakeinterp1(G1_stripe1.X(:,1), G1_stripe1.Z(:,1), (1:tiffImg.imageSize(2)).') ...
-    .* nakeinterp1(G1_stripe2.X(:,1), G1_stripe2.Z(:,1), (1:tiffImg.imageSize(2)).') ...
-    .* nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), (1:tiffImg.imageSize(2)).') ...
-    .* nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1)/2, (1:tiffImg.imageSize(2)).');
+    .* nakeinterp1(G1_stripe2.X(:,1), G1_stripe2.Z(:,1), (1:tiffImg.imageSize(2)).');% ...
+%     .* nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), (1:tiffImg.imageSize(2)).');% ...
+%     .* nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1)/2, (1:tiffImg.imageSize(2)).');
 
 Xstripe = Xstripe'; %should be row.
 
@@ -150,11 +172,12 @@ Xstripe = Xstripe'; %should be row.
 
 % Grid to re-interpolate results on - use the grid for creating the
 % background.
-xg = tiffImg.BG_smooth.x;
-yg = tiffImg.BG_smooth.y;
+xg = tiffImg.BG_offset.x;
+yg = tiffImg.BG_offset.y;
 
 if isequal(G1_1.X,G1_2.X) && isequal(G1_2.X,G2_1.X)
-    Z = G1_1.Z .* G1_2.Z .* G2_1.Z/2;
+    
+    Z = G1_1.Z .* G1_2.Z;
     X = G1_1.X;
     Y = G1_1.Y;
     
@@ -162,34 +185,41 @@ if isequal(G1_1.X,G1_2.X) && isequal(G1_2.X,G2_1.X)
     % however, this is quite slow to evaluate, so reinterplate onto the same
     % square grid
     fun = scatteredInterpolant(double(X),double(Y),double(Z));
-    Z = fun({xg,yg})';
+    G1z = fun({xg,yg})';
+    
+    fun = scatteredInterpolant(double(X),double(Y),double(G2_1.Z));
+    G2z = fun({xg,yg})';
 else
     fun = scatteredInterpolant(double(G1_1.X),double(G1_1.Y),double(G1_1.Z));
-    
-    G1_1Z = fun({xg,yg})';
+    G1z1 = fun({xg,yg})';
     
     fun = scatteredInterpolant(double(G1_2.X),double(G1_2.Y),double(G1_2.Z));
-    G1_2Z = fun({xg,yg})';
+    G1z2 = fun({xg,yg})';
     
     fun = scatteredInterpolant(double(G2_1.X),double(G2_1.Y),double(G2_1.Z));
-    G2_1Z = fun({xg,yg})';
+    G2z = fun({xg,yg})';
     
-    Z = G1_1Z .* G1_2Z .* G2_1Z/2;
+    G1z = G1z1 .* G1z2;% .* G2_1Z/2;
 end
 
-flatteningSurface.Z = Z;
-flatteningSurface.x = xg;
-flatteningSurface.y = yg;
+G2z = G2z.*G1z;
+
+FG_f.Z = (G2z-G1z);
+FG_f.x = xg;
+FG_f.y = yg;
+
+FG_o = FG_f;
+FG_o.Z = 1 - G1z./(G2z-G1z);
 
 % Compute the G1 area surface --------------------------------------------
-if nargout > 2
+if nargout > 3
     nucleiPerBin = 800; % emperical
     bin = sqrt( (2/sqrt(3)) * nucleiPerBin / rho );
     smooth = 2.5*bin;
     idx = dapi_c > 0.7 & dapi_c < 1.3;
     options.defaultValue = nan;
-    options.binSize = [bin/tiffImg.mmPerPixel,1];%[2.5/tiffImg.mmPerPixel,1];
-    options.smoothingRadius = smooth/tiffImg.mmPerPixel;%6/tiffImg.mmPerPixel;
+    options.binSize = [bin/tiffImg.mmPerPixel,1]; % [2.5/tiffImg.mmPerPixel,1];
+    options.smoothingRadius = smooth/tiffImg.mmPerPixel; % 6/tiffImg.mmPerPixel;
     options.reductionMethod = 'median';
     G1_area  = TiffImg.decimate_and_smooth(x(idx), y(idx), area(idx), options);
     
@@ -197,32 +227,31 @@ if nargout > 2
     fun = scatteredInterpolant(double(G1_area.X), double(G1_area.Y), double(G1_area.Z));
     Z = fun({xg,yg})';
     
-    figure
-    
-    % Plot surface
-    tri = delaunay(G1_area.X,G1_area.Y);
-    trisurf(tri,G1_area.X,G1_area.Y,G1_area.Z);
-    line(x(idx),y(idx),area(idx),'marker','.','linestyle','none','color','g','markersize',1)
-    
-%     surface(xg,yg,Z)
-    title('Area surface')
-    setTheme(gcf,'dark')
-    axis tight
+    if DEBUG
+        figure
+        tri = delaunay(G1_area.X,G1_area.Y);
+        trisurf(tri,G1_area.X,G1_area.Y,G1_area.Z);
+        line(x(idx),y(idx),area(idx),'marker','.','linestyle','none','color','g','markersize',1)
+        title('Area surface')
+        setTheme(gcf,'dark')
+        axis tight
+    end
     
     G1Area.Z = Z;
     G1Area.x = xg;
     G1Area.y = yg;
 end
 
-if nargout > 3
-    G1_idx = idx;
+if nargout > 4
+    G1_idx = dapi_c > 0.7 & dapi_c < 1.3;
 end
 
 if DEBUG
-    tmp = @(x,y) interp2mex(flatteningSurface.Z, nakeinterp1(xg(:),(1:size(flatteningSurface.Z,2))',x), nakeinterp1(yg(:),(1:size(flatteningSurface.Z,1))',y));%griddedInterpolant({yg,xg},Z,'linear','nearest');%
-    tmp_s = @(x) nakeinterp1((1:tiffImg.imageSize(2)).', Xstripe(:), x);
+    FG_f_fun = @(x,y) interp2mex(FG_f.Z, nakeinterp1(xg(:),(1:size(FG_f.Z,2))',x), nakeinterp1(yg(:),(1:size(FG_f.Z,1))',y));%griddedInterpolant({yg,xg},Z,'linear','nearest');%
+    FG_o_fun = @(x,y) interp2mex(FG_o.Z, nakeinterp1(xg(:),(1:size(FG_o.Z,2))',x), nakeinterp1(yg(:),(1:size(FG_o.Z,1))',y));%griddedInterpolant({yg,xg},Z,'linear','nearest');%
+    FG_s = @(x) nakeinterp1((1:tiffImg.imageSize(2)).', Xstripe(:), x);
     
-    dapi_c = dapi ./ tmp(x,y) ./ tmp_s(x);
+    dapi_c = (dapi) ./ (FG_s(x).*FG_f_fun(x,y)) + FG_o_fun(x,y);
     
     figure
     line(x,y,dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
