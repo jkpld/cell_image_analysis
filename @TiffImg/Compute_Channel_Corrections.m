@@ -74,10 +74,12 @@ end
 % Now compute the stripe with two iterations
 idx = I_c > 0.6 & I_c < 1.4; % Get data around flattened region
 Xstripe1 = decimateData(x(idx),ones(sum(idx),1),I_c(idx),'binSize',[100,100],'defaultValue',1); % Get median dapi value from bins 100 pixels wide along x direction
+Xstripe1.Z = highpass(Xstripe1.Z(:,2),3,100*tiffImg.mmPerPixel) + 1;
 I_c = I_c ./ nakeinterp1(Xstripe1.X(:,1), Xstripe1.Z(:,1), x); % Divide out the median value
 
 idx = I_c > 0.7 & I_c < 1.3; % Get data around flattened region
 Xstripe2 = decimateData(x(idx),ones(sum(idx),1),I_c(idx),'binSize',[100,100],'defaultValue',1); % Get median dapi value from bins 100 pixels wide along x direction
+Xstripe2.Z = highpass(Xstripe2.Z(:,2),3,100*tiffImg.mmPerPixel) + 1;
 
 % Combine stripe corrections
 xg = (1:tiffImg.imageSize(2)).';
@@ -94,12 +96,17 @@ if DEBUG
     title(['After x stripe correction (without flattening) : channel ' name])
     view(0,0)
     setTheme(gcf,'dark')
+    
+    figure
+    line(xg*tiffImg.mmPerPixel,Xstripe,'color','y')
+    title(['XStripe : channel ' name])
+    setTheme(gcf,'dark')
 end
 
 % Compute flattening surface. --------------------------------------------
 nucleiPerBin = 800; % emperical
 bin = sqrt( (2/sqrt(3)) * nucleiPerBin / rho );
-smooth = 2.5*bin;
+smooth = 1.5*bin;
     
 options.binSize = [bin/tiffImg.mmPerPixel,1]; % [2.5/tiffImg.mmPerPixel,1];
 options.smoothingRadius = smooth/tiffImg.mmPerPixel; % 6/tiffImg.mmPerPixel;
