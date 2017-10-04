@@ -104,6 +104,11 @@ classdef Granularity < FeatureGroup
             
             mask = L>0;
             
+            % Offset and scale
+            minI = min(I(:));
+            maxI = max(I(:));
+            I = (I-minI)/(maxI - minI);
+            
             % Subsample
             
             if Use_GPU
@@ -174,7 +179,8 @@ classdef Granularity < FeatureGroup
             % Starting object mean intensity
             Is = single(I); % need single array if on gpu
             startmean = accumarray(L,Is(FG),[N,1],@sum);    clear Is
-%             currentmean = startmean;
+            A = accumarray(L,ones(numel(L),1),[N,1],@sum); % object area
+            currentmean = startmean;
             
             % initialize granular spectrum
             if Use_GPU
@@ -188,7 +194,7 @@ classdef Granularity < FeatureGroup
             
             % compute granular spectrum on gpu
             for i = 1:GranularSpectrumLength
-%                 prevmean = currentmean;
+                prevmean = currentmean;
                 ero = imerode_mask(ero,se,notmask);
                 rec = imreconstruct(ero,I,4);
                 
@@ -199,11 +205,17 @@ classdef Granularity < FeatureGroup
                 else
                     currentmean = accumarray(L,rec(FG),[N,1],@sum);
                 end
-                
-%                 x(:,i+1) = prevmean - currentmean;
-                x(:,i+1) = x(:,i) - currentmean;
+                                
+                x(:,i+1) = prevmean - currentmean;
                 clear rec
             end
+            
+            % Un-scale
+            % - must multiply the minI offset by the object area since the
+            % granularity spectrum is integrated over the objects. (If I
+            % was using the mean intensity, this would not be required, but
+            % overall, this should be slightly faster.)
+            x = x*(maxI - minI) + minI.*A;
             
 %             % normalize granular spectrum
 %             x = 100*(x ./ startmean);
