@@ -1,32 +1,41 @@
 classdef TiffImg < matlab.mixin.Copyable
+
+
+    properties (SetAccess = private)
+        FileName
+        Acquisition_Info
+        mmPerPixel
+
+        workingClass
+        imageClass
+        imageSize
+        stripeWidth
+    end
+
     properties
         blockSize(1,1) double
-        Use_GPU(1,1) logical = false;
-        Verbose(1,1) logical = false;
-
-        % Iamge_Smooth_Kernel - The Kernel used to smooth the image before
-        % all operations (directly after reading the image in.)
-        Image_Smooth_Kernel = fspecial('gaussian',7,1);
 
         % Surface_Smoothing_Radius - The radius (in mm) to use when
         % smoothing the surfaces computed (threshold, background,
         % foreground). If set to NaN, then smoothing will be disabled.
         Surface_Smoothing_Radius(1,1) double = NaN;
-        
+
+        % Iamge_Smooth_Kernel - The Kernel used to smooth the image before
+        % all operations (directly after reading the image in.)
+        Image_Smooth_Kernel = fspecial('gaussian',7,1);
+
         % Image_Correction_Expression : The expression used to correct the
         % image. Valid variable names are
-        %    S : The input image           
+        %    S : The input image
         %    BG_o : A background offset (BG_offset) that is added or
         %      subtracted
-        %    BG_f : A background factor (BG_factor) that is multiplied or
-        %      divided
         %    BG_s : A background x stripe (BG_stripeX) that is multiplied
         %      or divided
         %    FG_o : A foreground offset (FG_offset) that is added or
         %      subtracted
         %    FG_f : A foreground factor (FG_factor) that is multiplied or
         %      divided
-        %    FG_s : A foreground x stripe (FG_stripeX) that is multiplied 
+        %    FG_s : A foreground x stripe (FG_stripeX) that is multiplied
         %      or divided
         %
         %  If BG_offset or FG_offset have not been assigned to the
@@ -38,31 +47,25 @@ classdef TiffImg < matlab.mixin.Copyable
         %
         %   Example expression (this is also the default expression):
         %    (S - BG_o * BG_s + FG_o) / (FG_s * FG_f)
-        Image_Correction_Expression(1,1) string {validateExpression(Image_Correction_Expression,"S")} = "(S - BG_o*BG_s) / (FG_s*FG_f)"
-        
-        
-        ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression(1,1) string {validateExpression} = "FG_o"
+        Image_Correction_Expression(1,1) string {validateExpression(Image_Correction_Expression,"S")} = "S"
     end
     properties (Dependent)
         Current_Image_Correction_Expression
     end
-    
-    properties (SetAccess = private)
-        FileName
-        mmPerPixel
-        
-        workingClass
-        imageClass
-        imageSize
-        
+    properties
+        ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression(1,1) string {validateExpression} = ""
+    end
+
+    properties (SetAccess = private, Hidden)
         tileSize
         tilesPerBlck
         numBlcks
         numTiles
     end
+
     properties (SetAccess = private, Hidden)
         FileID
-        
+
         maxSampleValue
         tiles
         xEdges
@@ -78,8 +81,8 @@ classdef TiffImg < matlab.mixin.Copyable
         Threshold_After_Correction(1,1) logical = false;
         Threshold_CorrectionsExpression;
     end
-    
-    properties 
+
+    properties
         threshold = []
 
         % old props
@@ -87,21 +90,25 @@ classdef TiffImg < matlab.mixin.Copyable
 %         BG_Xstripe = [] % this multiplies the BG_offset
 %         FG_smooth = []
 %         FG_Xstripe = [] % this multiplies the FG_factor
-        
+
         % new props
 %         BG_factor = []
         BG_offset = []
         BG_stripeX = []
-        
+
         FG_offset = [] % to subtract from the foreground
         FG_factor = [] % to divide the foreground
         FG_stripeX = []
-        
+
 
         Sharpness = []
+
+        Use_GPU(1,1) logical = false;
+        Verbose(1,1) logical = false;
     end
 
     methods
+
         function obj = TiffImg(filename)
 
             if ( nargin==0 )
@@ -127,14 +134,34 @@ classdef TiffImg < matlab.mixin.Copyable
 
             imageDescription = tifflib('getField',obj.FileID,270);
             aqstnInfo = textscan(imageDescription,'%s','Delimiter','|');
-            obj.mmPerPixel = sscanf(aqstnInfo{1}{~cellfun('isempty',strfind(aqstnInfo{1},'MPP'))},'MPP = %f')/1000;
 
-            if ~isfinite(obj.mmPerPixel)
+            aqstnInfo = aqstnInfo{1};
+            proc_info = regexp(aqstnInfo,'(?<key>[^=].*?) = (?<value>.*)','names');
+            notKeyValue = cellfun(@isempty,proc_info);
+            info.Extra = aqstnInfo(notKeyValue);
+            for i = 1:numel(proc_info)
+                if notKeyValue(i)
+                    continue;
+                else
+                    valueNumber = str2double(proc_info{i}.value);
+                    if isnan(valueNumber)
+                        info.(strrep(proc_info{i}.key,' ','_')) = proc_info{i}.value;
+                    else
+                        info.(strrep(proc_info{i}.key,' ','_')) = str2double(proc_info{i}.value);
+                    end
+                end
+            end
+
+            if ~isfield(info,'MPP') || ~isfinite(info.MPP)
                 tifflib('close',obj.FileID);
                 obj.FileName = '';
                 obj.FileID = uint64(0);
-                error('tiffReadHelper:MissingMMPerPixel','The image description does not have a MPP (micron per pixel) field, which is required for this class.')
+                error('TiffImg:MissingMMPerPixel','The image description does not have a MPP (micron per pixel) field, which is required for this class.')
             end
+            
+            obj.Acquisition_Info = info;
+            obj.mmPerPixel = info.MPP/1000;
+
 
             sampleFormat = tifflib('getField',obj.FileID,339);
             switch sampleFormat
@@ -150,19 +177,19 @@ classdef TiffImg < matlab.mixin.Copyable
                     tifflib('close',obj.FileID);
                     obj.FileName = '';
                     obj.FileID = uint64(0);
-                    error('tiffReadHelper:unsupporetedFormat','The image has an unsupported format, Supported formats are uint, int, and floating point.')
+                    error('TiffImg:unsupporetedFormat','The image has an unsupported format, Supported formats are uint, int, and floating point.')
             end
 
             tmp = tifflib('readEncodedTile',obj.FileID,0);
             obj.imageClass = class(tmp);
-            
+
             % Set the working class. Always work with a float type to have
             % +- numbers. If image is integers less than 16 bit, (2
             % bytes), then use single precision (4 bytes). If image is
             % integers with more than 16 bits then use double.
             % If the image is logical, then just use logical.
             obj.workingClass = obj.imageClass;
-            
+
             if isinteger(tmp)
                 if str2double(obj.imageClass(end-1:end)) > 16
                     obj.workingClass = 'double';
@@ -179,7 +206,28 @@ classdef TiffImg < matlab.mixin.Copyable
             numTiles = flip(numTiles);
             obj.numTiles = numTiles;
 
-            obj.blockSize = max(obj.tileSize);
+            if ~isfield(info,'StripeWidth') || ~isfinite(info.StripeWidth)
+                str = ['The image description does not have a StripeWidth ',...
+                    'field giving the width, in pixels, of each line scan ',...
+                    'of the microscope.\nIf the image has an stripe ',...
+                    'artifact along the scan direction, then it could be ',...
+                    'important that the blockSize used to compute the ',...
+                    'Threshold/Background/... is approximately the same ',...
+                    'size as this StripeWidth, or a multiple of it. If it ',...
+                    'is not, then artifacts could appear in the ',...
+                    'Threshold/Background/...'];
+                warning('TiffImg:MissingStripeWidth',str)
+                
+                obj.stripeWidth = nan;
+                obj.blockSize = max(obj.tileSize);
+            else
+                obj.stripeWidth = info.StripeWidth;
+                
+                % Set the default block size to be the nearest tileSize
+                % multiple of the StripeWidth
+                obj.blockSize = round(obj.stripeWidth/max(obj.tileSize))*max(obj.tileSize);
+            end
+            
 
             close(obj); % close the image file.
         end
@@ -209,7 +257,7 @@ classdef TiffImg < matlab.mixin.Copyable
         function tf = isEmpty(obj)
             tf = isempty(obj.FileName);
         end
-        
+
         function delete(obj)
             obj.close()
         end
@@ -226,16 +274,16 @@ classdef TiffImg < matlab.mixin.Copyable
                 obj.FileID = uint64(0);
             end
         end
-        
+
         function exprssn = get.Current_Image_Correction_Expression(obj)
             exprssn = processExpression(obj,obj.Image_Correction_Expression,true,"S");
         end
 
         function [I,x] = getColumn(obj, col_idx)
-            
+
             % initialize array for image stripe
             I = zeros(obj.imageSize(1),obj.tileSize(2),obj.imageClass);
-        
+
             % Read in image stripe
             counter = 1;
             obj.open()
@@ -247,24 +295,24 @@ classdef TiffImg < matlab.mixin.Copyable
             end
             obj.close()
             I(:,n+1:end) = [];
-            
+
             % Convert image to working class.
             if ~strcmp(obj.imageClass,'logical')
                 I = cast(I,obj.workingClass);
                 I = I / cast(obj.maxSampleValue,obj.workingClass);
             end
-            
+
             if nargout > 1
                 % Compute x pixels
                 x = (1:n) + (col_idx-1)*obj.tileSize(2);
             end
         end
-        
+
         function [I,y] = getRow(obj, row_idx)
-            
+
             % initialize array for image stripe
             I = zeros(obj.tileSize(1),obj.imageSize(2),obj.imageClass);
-        
+
             % Read in image stripe
             counter = 1;
             obj.open()
@@ -276,35 +324,35 @@ classdef TiffImg < matlab.mixin.Copyable
             end
             obj.close()
             I(m+1:end,:) = [];
-            
+
             % Convert image to working class.
             if ~strcmp(obj.imageClass,'logical')
                 I = cast(I,obj.workingClass);
                 I = I / cast(obj.maxSampleValue,obj.workingClass);
             end
-            
+
             if nargout > 1
                 % Compute x pixels
                 y = (1:m).' + (row_idx-1)*obj.tileSize(1);
             end
         end
-        
+
         function I = getTile(obj, tile_idx)
             % initialize array for image stripe
             I = zeros(obj.tileSize,obj.imageClass);
-            
+
             tmp = tifflib('readEncodedTile',obj.FileID,double(tile_idx));
-            
+
             [m,n] = size(tmp);
             I(1:m, 1:n) = tmp;
-            
+
             % Convert image to working class.
             if ~strcmp(obj.imageClass,'logical')
                 I = cast(I,obj.workingClass);
                 I = I / cast(obj.maxSampleValue,obj.workingClass);
             end
         end
-        
+
         function [I,x,y] = getBlock(obj,blck_x,blck_y)
             tmpB_x_inds = obj.blck_x_inds + (blck_x-1)*obj.tilesPerBlck(2);
             tmpB_y_inds = obj.blck_y_inds + (blck_y-1)*obj.tilesPerBlck(1);
@@ -323,12 +371,12 @@ classdef TiffImg < matlab.mixin.Copyable
             maxY = 0;
 
             I = zeros(obj.blockSize,obj.blockSize,obj.imageClass);
-            
+
             for t = 1:numel(cTiles)
 
                 [j,k] = ind2sub(szcTiles,t);
                 tmp = tifflib('readEncodedTile',obj.FileID,cTiles(t));
-    
+
                 tmpT_y_inds = obj.tile_y_inds + (j-1)*obj.tileSize(1);
                 tmpT_x_inds = obj.tile_x_inds + (k-1)*obj.tileSize(2);
 
@@ -342,7 +390,7 @@ classdef TiffImg < matlab.mixin.Copyable
                 end
 
                 I(tmpT_y_inds, tmpT_x_inds) = tmp;
-                clear tmp
+%                 clear tmp
             end
 
             if maxX
@@ -361,13 +409,13 @@ classdef TiffImg < matlab.mixin.Copyable
                 I = cast(I,obj.workingClass);
                 I = I / cast(obj.maxSampleValue,obj.workingClass);
             end
-            
+
             if nargout > 1
                 y = (1:(maxY-1)).' + (blck_y-1)*obj.blockSize;
                 x = (1:(maxX-1)) + (blck_x-1)*obj.blockSize;
             end
         end
-        
+
         function tiles_xy = computeTileNumbers(obj,bboxes)
             % COMPUTETILENUMBERS Compute the tile numbers that contain the
             % bounding boxes given.
@@ -377,53 +425,53 @@ classdef TiffImg < matlab.mixin.Copyable
             % Input
             %   bboxes : Nx4 list of bounding boxes
             %
-            % Output 
+            % Output
             %   tiles : Nx4 array where the i'th row is [x1,y1,x2,y2].
             %     x1/x2 is the left/right-most tiles. y1/y2 is the
             %     top/bottom-most tiles. These are not the linear indices
             %     that can be used to read in a tile with tifflib; they
             %     must be converted to linear indices. The x/y indices are
             %     0 based.
-            
+
             % compute x,y points of bounding box corners
             %  -> bounding box = (left, top, width, height)
             bboxes(:,3:4) = bboxes(:,3:4) + bboxes(:,1:2);
-            
+
             % x,y tile numbers, 0 based
             tiles_xy = ceil(bboxes ./ [obj.tileSize,obj.tileSize]) - 1;
         end
-        
+
         Z = smoothSurf(obj,z,type);
-        
+
         th = Compute_Threshold(obj, applyCorrectionsFirst);
-        
+
         bg = Compute_Background(obj, computeXStripeArtifact, varargin);
-        
+
         fg = Compute_Foreground(obj, computeXStripeArtifact, varargin);
-        
+
         st = Compute_StripeArtifact(obj, BG_or_FG, varargin);
-        
+
         sh = Compute_Sharpness(obj);
-        
+
         [x, x_names] = Measure_BasicProps(obj,channelName, varargin);
-        
+
         feature = Measure_Intensity(tiffImg, Use_Parallel, varargin);
-        
+
         [FG, BG, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(tiffImg,x,y,dapi,area,options);
-        
+
         function fig = plot(obj,name)
             % PLOT Plot one of the computed quantities.
             %
             % fig = tiffImg.plot(name)
             %
-            % Input 
+            % Input
             %   name : one of the following strings
             %     'threshold'
             %     'background'
             %     'foreground'
             %     'background_stripe'
             %     'foreground_stripe'
-            
+
             valid = {'threshold','background','foreground_factor','foreground_offset','sharpness','stripe_background','stripe_foreground'};
             internal_name = {'threshold','BG_offset','FG_factor','FG_offset','Sharpness','BG_stripeX','FG_stripeX'};
             idx = find(strncmpi(name, valid, numel(name)));
@@ -434,11 +482,11 @@ classdef TiffImg < matlab.mixin.Copyable
                 name = internal_name{idx};
                 name_user = valid{idx};
             end
-            
+
             if isempty(obj.(name))
                 error('plot:undefinedSurface','The %s has not been computed yet. Please compute it before trying to plot it.', name_user);
             end
-            
+
             fg = figure('visible','off');
             try
                 if idx > 5
@@ -462,6 +510,7 @@ classdef TiffImg < matlab.mixin.Copyable
                     else
                         surface(x*obj.mmPerPixel, y*obj.mmPerPixel, Z, 'EdgeColor', 'none');
                     end
+                    shading interp
                     title(strrep(name_user,'_',' '))
                     xlabel('x / mm')
                     ylabel('y / mm')
@@ -510,30 +559,30 @@ classdef TiffImg < matlab.mixin.Copyable
             %     Examples: requiredVars = ["S"] -> @(S,x,y). requiredVars
             %     = ["S","A"] -> @(S,A,x,y). requiredVars = {} -> @(x,y)
             %
-            % Ouput 
+            % Ouput
             %   fun : A function handle with three inputs (S,xi,yo). S is
             %     the image to evaluate on, xi and yi are the pixel values
             %     of the image.
             %
             % Example call
             %   img_corrected = fun(img,xi,yi);
-            
+
             if isempty(expression) || expression == ""
                 fun = [];
                 return;
             end
-            
+
             if nargin < 5
                 requiredVars = "";
             end
-            
+
             % Process the expression
             exprssn = processExpression(obj,expression,removeUndefined,requiredVars);
-            
+
             % Generate the function
             fun = generateFunctionFromExpression(obj, exprssn, expandInput, requiredVars);
         end
-        
+
         function fun = generateCorrectionFunction(obj, expandInput)
             % GENERATECORRECTIONFUNCITON Create function handle to apply
             % the Current_Image_Correction_Expression
@@ -549,24 +598,24 @@ classdef TiffImg < matlab.mixin.Copyable
             %     expanded, and the output is size(xi). Default value is
             %     true.
             %
-            % Ouput 
+            % Ouput
             %   fun : A function handle with three inputs (S,xi,yo). S is
             %     the image to evaluate on, xi and yi are the pixel values
             %     of the image.
             %
             % Example call
             %   img_corrected = fun(img,xi,yi);
-            
-            
+
+
             if nargin < 2
                 expandInput = true;
             else
                 expandInput = logical(expandInput(1));
             end
-            
+
             fun = generateFunctionFromExpression(obj, obj.Current_Image_Correction_Expression, expandInput, "S");
         end
-        
+
         function clearCorrections(t)
             t.BG_offset = [];
             t.BG_stripeX = [];
@@ -575,7 +624,7 @@ classdef TiffImg < matlab.mixin.Copyable
             t.FG_stripeX = [];
         end
     end
-    
+
     methods (Access = private, Hidden)
         function fun = generateFunctionFromExpression(obj, expression, expandInput, requiredVars)
             % GENERATECORRECTIONFUNCITON Create function handle to apply
@@ -588,32 +637,32 @@ classdef TiffImg < matlab.mixin.Copyable
             %   expression : Cell array where the first element is the
             %     string expression and the second element is the list of
             %     variables in the expression.
-            %   expandInput : (optional) Logical flag. If true, then the 
+            %   expandInput : (optional) Logical flag. If true, then the
             %     input arrays to evaluate the correction function at, xi
             %     and yi, are expanded to form a matrix of size size(yi,1)
             %     x size(xi,2). If false, then the input arrays are not
             %     expanded, and the output is size(xi). Default value is
             %     true.
             %
-            % Ouput 
+            % Ouput
             %   fun : A function handle with three inputs (S,xi,yo). S is
             %     the image to evaluate on, xi and yi are the pixel values
             %     of the image.
             %
             % Example call
             %   img_corrected = fun(img,xi,yi);
-            
+
             if nargin < 3
                 expandInput = true;
             else
                 expandInput = logical(expandInput(1));
             end
-            
+
             currentVars = expression{2};
             currentExpr = expression{1};
 
             intpl1d = @(x,y,xi) cast(nakeinterp1(double(x(:)), double(y(:)), double(xi(:))),'like',y);
-            
+
             % Create the functions for the current expression
             for i = 1:numel(currentVars)
                 switch currentVars{i}
@@ -644,13 +693,13 @@ classdef TiffImg < matlab.mixin.Copyable
                         error('createEvaluator:unknownVar','There is an unknown variable. If you see this error, then the createEvaluator() function is out of sync with the validateExpression() and get.Current_Image_Correction_Expression() functions.')
                 end
             end
-            
+
             % Evaluate the current expression and output the resulting
             % function handle.
-            
+
             fun = eval(currentExpr);
         end
-        
+
         function exprssn = processExpression(obj,expression,removeUndefined,requiredVars)
             % PROCESSEXPRESSION Process an expression an output a
             % processed (and, if requested, simplified) expression with the
@@ -672,7 +721,7 @@ classdef TiffImg < matlab.mixin.Copyable
             %     requiredVars = {"S"} -> @(S,x,y). requiredVars =
             %     {"S","A"} -> @(S,A,x,y). requiredVars = {} -> @(x,y)
             %
-            % Ouput 
+            % Ouput
             %   exprssn : A 1 x 2 cell array where the first element is the
             %     processed expression and the second element is the list
             %     of variables.
@@ -685,17 +734,17 @@ classdef TiffImg < matlab.mixin.Copyable
             %   (Assume BG_s has not been defined)
             %
             %   output exprssn = {"@(S,x,y) S - BG_o(x,y)", ["S","BG_o"]}
-            
+
             if nargin < 4
                 requiredVars = "";
             end
-            
+
             % Validate expression
             validateExpression(expression,requiredVars);
             requiredVars = requiredVars(requiredVars~="");
 
             exprssn = str2sym(char(expression));
-            
+
             % Get a list of the variables in the expression
             vars = string(symvar(char(expression)))';
 
@@ -711,7 +760,7 @@ classdef TiffImg < matlab.mixin.Copyable
                     if isempty(obj.(names{idx}))
                         if removeUndefined
                             % variable name
-                            name = names{idx}(1:4); 
+                            name = names{idx}(1:4);
                             if strcmp(name(4),'o')
                                 % If an offset, then replace with 0
                                 exprssn = subs(exprssn,name,0);
@@ -725,17 +774,17 @@ classdef TiffImg < matlab.mixin.Copyable
                     end
                 end
             end
-            
+
             % Get an updated list of the variables in the expression if
             % necessary
             if removeUndefined
                 vars = string(symvar(char(exprssn)))';
             end
-            
+
             % Convert to symbolic expression and back to string, to make
             % sure that the expression is valid.
             exprssn = string(exprssn);
-            
+
             % Vectorize the expression
             exprssn = vectorize(exprssn);
 
@@ -743,7 +792,7 @@ classdef TiffImg < matlab.mixin.Copyable
             % add the function inputs
             for i = 1:numel(vars)
                 if contains(vars(i),requiredVars)
-                    
+
                     continue;
                 else
                     if endsWith(vars(i),'s')
@@ -753,7 +802,7 @@ classdef TiffImg < matlab.mixin.Copyable
                     end
                 end
             end
-            
+
             % Tack on the function handle head
             if contains(exprssn,"x")
                 hasX = "x";
@@ -766,12 +815,12 @@ classdef TiffImg < matlab.mixin.Copyable
                 hasY = "~";
             end
             exprssn = "@(" + join([string(requiredVars),hasX,hasY],',') + ")" + exprssn;
-            
+
             % Output the expression and variables as a cell array
             exprssn = {exprssn, vars};
         end
     end
-    
+
     methods (Static)
         th = otsuthresh_scale(I,scale);
         [Z,X,Y] = smoothSurface(x,y,z,r,type);
