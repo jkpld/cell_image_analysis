@@ -4,14 +4,16 @@ classdef DTWatershed < ObjectPartitioner
     end
     properties (Hidden)
         disk
+        H
     end
     methods
         function obj = DTWatershed(options)
 
             % Set defaults
             obj.Channel = "DAPI";
-            obj.Smoothing_Size = 5;
-            obj.disk = strel('disk',5);
+            obj.Smoothing_Size = 4;
+%             obj.disk = strel('disk',2);
+            obj.H = fspecial('gaussian',7*obj.Smoothing_Size,obj.Smoothing_Size);
             
             % Overwrite with user supplied options.
             if nargin > 0
@@ -47,6 +49,7 @@ classdef DTWatershed < ObjectPartitioner
         function obj = set.Smoothing_Size(obj, ss)
             obj.Smoothing_Size = ss;
             obj.disk = strel('disk',ss); %#ok<MCSUP>
+%             obj.H = fspecial('gaussian',7*obj.Smoothing_Size,obj.Smoothing_Size); %#ok<MCSUP>
         end
         
         function BW_partitioned = partition(obj, BW, I, Image_Offset)
@@ -77,12 +80,14 @@ classdef DTWatershed < ObjectPartitioner
             % Pixel list of objects to attempt
             CC_attempt = CC.PixelIdxList(attempt);
             se = obj.disk;
+%             h = obj.H;
             nRows = size(BW,1);
             
             if obj.Use_Parallel
                 parfor i = 1:numel(CC_attempt)
                     BWi = createObjectImages(CC_attempt{i},nRows,true(numel(CC_attempt{i}),1));
                     D = bwdist(~BWi);
+%                     D = -imfilter(D,h,'symmetric');
                     D = -imopen(D,se);
                     D(~BWi) = inf;
                     L = watershed(D,8);
@@ -93,6 +98,7 @@ classdef DTWatershed < ObjectPartitioner
                 for i = 1:numel(CC_attempt)
                     BWi = createObjectImages(CC_attempt{i},nRows,true(numel(CC_attempt{i}),1));
                     D = bwdist(~BWi);
+%                     D = -imfilter(D,h,'symmetric');
                     D = -imopen(D,se);
                     D(~BWi) = inf;
                     L = watershed(D,8);
