@@ -31,7 +31,7 @@ rho = numel(x)/prod(tiffImg.imageSize*tiffImg.mmPerPixel); % nuclei/mm^2
 if nargin < 6
     nucleiPerBin = 300; % emperical
     bin = sqrt( (2/sqrt(3)) * nucleiPerBin / rho );
-    smooth = 2.5*bin;
+    smooth = 5*bin;%2.5*bin
     options = struct( ...
         'reductionMethod', 'mode', ...
         'gridType', 'hexagonal', ...
@@ -39,19 +39,38 @@ if nargin < 6
         'binSize', [bin/tiffImg.mmPerPixel,1], ... % 1.5/mmPerPixel
         'smoothingRadius',smooth/tiffImg.mmPerPixel, ... % 4/mmPerPixel
         'defaultValue',1);
+else
+    bin = options.binSize(1)*tiffImg.mmPerPixel;
 end
 
-DEBUG = 1;
+DEBUG = 0;
 
 % Initial correction. ----------------------------------------------------
 
+% Flatten the g1 band with a large smoothing radius try and remove any edge
+% effects.
+options.smoothingRadius = 5*bin/tiffImg.mmPerPixel;
+[~,DAPI_mode] = TiffImg.decimate_and_smooth(x, y, dapi, options);
+dapi_c = dapi ./ DAPI_mode(x,y);
+% x(toRemove) = [];
+% y(toRemove) = [];
+% dapi(toRemove) = [];
+
 % Flatten the g1 band and position it approximately at 1 (assuming the G1
 % band is the mode)
-
-[G1_1,DAPI_mode] = TiffImg.decimate_and_smooth(x, y, dapi, options);
+options.smoothingRadius = 2.5*bin/tiffImg.mmPerPixel;
+idx = dapi_c > 0.5 & dapi_c < 1.5;
+[G1_1,DAPI_mode] = TiffImg.decimate_and_smooth(x(idx), y(idx), dapi(idx), options);
 dapi_c = dapi ./ DAPI_mode(x,y);
 
 if DEBUG
+    figure
+    tri = delaunay(G1_1.X,G1_1.Y);
+    trisurf(tri,G1_1.X,G1_1.Y,G1_1.Z);
+    line(x,y,dapi,'marker','.','linestyle','none','color','g','markersize',1)
+    title('original data with fitted surface')
+    setTheme(gcf,'dark')
+    
     figure
     line(x,y,dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
     title('after initial g1 flattening')
@@ -60,7 +79,7 @@ if DEBUG
     zlim([0,3])
     view(0,0)
 end
-
+% error('some err')
 % Remove the stripe artifact with two iterations of fitting. -------------
 
 % Select the g1 band. Compute the median dapi value along small x-slices to
