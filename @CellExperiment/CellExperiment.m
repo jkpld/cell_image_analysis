@@ -6,29 +6,39 @@ classdef CellExperiment < handle
         Channel_Names(1,:) string
         Channel_TiffImgs(1,:) TiffImg
         Mask(1,1) TiffImg
-
-        Object_Centroid(:,2) single
-        Object_Area(:,1) single
-
-        DAPI_G1_Area(1,1) struct
-        DAPI_G1_Intensity(1,1) struct
-        DAPI_G1_Idx(:,1) double
+        
+        Feature_File(1,1) string
+        Feature_Names(1,:) string
     end
     properties
         nucleiPartitioner(1,1) ObjectPartitioner = None
         featureExtractor(1,1) FeatureExtractor
 
         Surface_Smoothing_Radius(1,1) double = NaN % [mm]
-        SurfaceComputation_BlockSize(1,1) double = 1024 % [pixels]
+        SurfaceComputation_BlockSize(1,:) double % [pixels]
         FeatureComputation_BlockSize(1,1) double = 4096 % [pixels]
-
+    end
+    properties (Hidden)
+        Object_Centroid(:,2) single
+        Object_Area(:,1) single
+    end
+    properties
+        DAPI_G1_Area(1,1) struct
+%         DAPI_G1_Intensity(1,1) struct
+        DAPI_G1band_Idx(:,1) double
+    end
+    properties
         Use_GPU(1,1) logical = true
-        Use_Parallel(1,1) logical = true
+        Use_Parallel(1,1) logical = false
         Verbose(1,1) logical = true
     end
-    properties (SetAccess = private)%, Hidden)
+    properties (SetAccess = private, Hidden)
         Threshold_Corrected_Image(1,1) logical
         TiffImg_for_Generating_Mask(1,1) TiffImg
+    end
+    properties (Hidden)
+        UserData
+        NumberObjectBeforePartitioning
     end
 
     methods
@@ -61,7 +71,16 @@ classdef CellExperiment < handle
                     end
                     prevTileSize = tileSize;
                     prevImageSize = imageSize;
+                    
+                    % Set default blockSize
+                    if isnan(obj.Channel_TiffImgs(i).stripeWidth)
+                        obj.SurfaceComputation_BlockSize(i) = round(1024/max(tileSize))*max(tileSize);
+                    else
+                        obj.SurfaceComputation_BlockSize(i) = round(obj.Channel_TiffImgs(i).stripeWidth/max(tileSize))*max(tileSize);
+                    end
                 end
+                
+                
             end
         end
 
@@ -81,19 +100,21 @@ classdef CellExperiment < handle
             obj.Threshold_Corrected_Image = thresholdCorrectedImage;
 
             % Grab the DAPI TiffImg
-            t_ch = obj.Channel_TiffImgs(obj.Channel_Names == "DAPI");
+            dapi_idx = obj.Channel_Names == "DAPI";
+            t_ch = obj.Channel_TiffImgs(dapi_idx);
 
             % Make a copy of the image before going farther
             t = copy(t_ch);
             obj.TiffImg_for_Generating_Mask = t; % Save for later reference
-
+            t.clearCorrections();
+        
             % Set some properties
             t.Surface_Smoothing_Radius = obj.Surface_Smoothing_Radius;
             t.Use_GPU = obj.Use_GPU;
             t.Verbose = obj.Verbose;
 
             % *Compute threshold*
-            t.blockSize = obj.SurfaceComputation_BlockSize;
+            t.blockSize = obj.SurfaceComputation_BlockSize(dapi_idx);
             t.Compute_Threshold();
 
             % The nuclei partition could need an Area_Normalizer or
@@ -120,7 +141,8 @@ classdef CellExperiment < handle
                 [FG_f, FG_o, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(t,x(:,1),x(:,2),x(:,4),x(:,3));
 
                 obj.DAPI_G1_Area = G1Area;
-                obj.DAPI_G1_Idx = G1_idx;
+                obj.DAPI_G1band_Idx = G1_idx;
+                obj.NumberObjectBeforePartitioning = size(x,1);
 
                 t.FG_offset = FG_o;
                 t.FG_factor = FG_f;
@@ -128,7 +150,7 @@ classdef CellExperiment < handle
 
                 % Set the Area_Normalizer of the nucleiPartitioner
                 FG_o_fun = interpolator2d(FG_o.x, FG_o.y, FG_o.Z, false);
-                obj.nucleiPartitioner.Intensity_Normalizer = @(I,x,y) I - FG_o_fun(x,y);
+                obj.nucleiPartitioner.Intensity_Normalizer = @(I,x,y) I + FG_o_fun(x,y);
                 
                 if thresholdCorrectedImage
                     % Use the background and foreground corrected image to
@@ -139,7 +161,7 @@ classdef CellExperiment < handle
                     t.FG_factor.Z = t.FG_factor.Z./minFG;
 
                     % *Compute threshold*
-                    t.blockSize = obj.SurfaceComputation_BlockSize;
+                    t.blockSize = obj.SurfaceComputation_BlockSize(dapi_idx);
                     t.Surface_Smoothing_Radius = NaN; % smoothing is not necessary for this surface since the median threshold value will be used as a global threshold.
                     t.Compute_Threshold(1);
                     t.Surface_Smoothing_Radius = obj.Surface_Smoothing_Radius;
@@ -182,6 +204,9 @@ classdef CellExperiment < handle
             if nargin < 2
                 DEBUG = 0;
             end
+            if ~DEBUG && nargout > 0
+                error('Correct_Image_Background:tooManyOuputs','Too many ouput arguments. Ouput is only supported if DEBUG is true.')
+            end
             
             % Set Smoothing_Surface_Radius, Use_Parallel, and Verbose;
             % clear any backgrounds and foregrounds.
@@ -190,10 +215,11 @@ classdef CellExperiment < handle
 
             % Correct DAPI first to get the G1 indices
             % shorter name
-            t = obj.Channel_TiffImgs(obj.Channel_Names == "DAPI");
+            i = obj.Channel_Names == "DAPI";
+            t = obj.Channel_TiffImgs(i);
 
             % *Compute background*
-            t.blockSize = obj.SurfaceComputation_BlockSize;
+            t.blockSize = obj.SurfaceComputation_BlockSize(i);
             t.Compute_Background(1,'Object_Mask',obj.Mask);
 
             % *Measure basic props*
@@ -204,14 +230,14 @@ classdef CellExperiment < handle
             x = double(x);
             
             if DEBUG && nargout > 0
-                varargout{1} = x;
+                varargout{1} = struct('basicProps',x,'name','DAPI');
             end
 
             % *Compute DAPI forground and stripe correction*
             [FG_f, FG_o, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(t,x(:,1),x(:,2),x(:,4),x(:,3));
 
             obj.DAPI_G1_Area = G1Area;
-            obj.DAPI_G1_Idx = G1_idx;
+            obj.DAPI_G1band_Idx = G1_idx;
             
             t.FG_offset = FG_o;
             t.FG_factor = FG_f;
@@ -230,7 +256,7 @@ classdef CellExperiment < handle
                 t = obj.Channel_TiffImgs(i);
 
                 % *Compute background*
-                t.blockSize = obj.SurfaceComputation_BlockSize;
+                t.blockSize = obj.SurfaceComputation_BlockSize(i);
                 t.Compute_Background(1,'Object_Mask',obj.Mask);
 
                 % *Measure basic props*
@@ -244,13 +270,13 @@ classdef CellExperiment < handle
                 end
 
                 % *Compute channel correction*
-                [FG, Xstripe] = Compute_Channel_Corrections(t, x(G1_idx,1), x(G1_idx,2), I(G1_idx), [], char(name));
-                t.FG_factor = FG;
+                [FG_o, Xstripe] = Compute_Channel_Corrections(t, x(G1_idx,1), x(G1_idx,2), I(G1_idx), [], char(name));
+                t.FG_offset = FG_o;
                 t.FG_stripeX = Xstripe;
             end
         end
 
-        function [features, feature_names] = Compute_Object_Features(obj)
+        function [features, feature_names] = Compute_Object_Features(obj, saveToFileName, overWrite)
 
             % Check to see if we have a mask
             if isEmpty(obj.Mask)
@@ -262,25 +288,59 @@ classdef CellExperiment < handle
                     all(isempty(obj.featureExtractor.featureGroups))
                 error('Compute_Object_Features:noFeatureGroups','No FeatureGroups have been added to the FeatureExtractor.');
             end
-
+            
+            if exist(saveToFileName,'file')
+                if nargin < 3 || ~overWrite
+                    buttonName = questdlg('The file specified already exists. Do you want to overide the file?','File already exists','No');
+                    if ~strcmp(buttonName,'Yes')
+                        return;
+                    end
+                end
+            end
+                
             % Set extractor channel names
             obj.featureExtractor.channels = obj.Channel_Names;
 
             % Number of channels
             N_ch = numel(obj.Channel_TiffImgs);
-            try
+            
+            % Set block sizes, get correction functions
+            CorrectionFunction = cell(1,N_ch);
+            postProcIntegratedInt_Offset = cell(1,N_ch);
 
-                % Set block sizes, get correction functions
-                CorrectionFunction = cell(1,N_ch);
-                postProcIntegratedInt_Offset = cell(1,N_ch);
+            require_IntOffset = false;
+            for i = 1:N_ch
+                t = obj.Channel_TiffImgs(i);
+                t.blockSize = obj.FeatureComputation_BlockSize;
+
+                CorrectionFunction{i} = generateCorrectionFunction(t);
+                postProcIntegratedInt_Offset{i} = generateFunction(t,t.ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression,false,false);
                 
-                for i = 1:N_ch
-                    t = obj.Channel_TiffImgs(i);
-                    t.blockSize = obj.FeatureComputation_BlockSize;
-                    
-                    CorrectionFunction{i} = generateCorrectionFunction(t);
-                    postProcIntegratedInt_Offset{i} = generateFunction(t,t.ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression,false,false);
+                require_IntOffset = require_IntOffset || ...
+                    ~isempty(postProcIntegratedInt_Offset{i});
+            end
+            
+            % Check to see that we have the required information : we need
+            % to have the object areas and centroids. These can be those
+            % that were computed in Correct_Image_Backgrounds, or they can
+            % be from a Location and Shape feature group that we will
+            % extract.
+            featNames = [obj.featureExtractor.featureGroups.GroupName];
+            
+            if require_IntOffset
+                hasRequired = ~isempty(obj.Object_Area) && ~isempty(obj.Object_Centroid);
+                computingRequired = all(ismember(["Location","Shape"], featNames)) || ismember("BasicProps", featNames);
+                
+                if  ~computingRequired && ~hasRequired
+                    % Error
+                    % Add a BasicProps group to the front of the featureGroups
+                    obj.featureExtractor.featureGroups = [ ...
+                        BasicProps('DAPI', struct('Use_GPU', obj.Use_GPU)), ...
+                        obj.featureExtractor.featureGroups];
                 end
+            end
+                
+            try
 
                 % Initialize the feature sizes
                 feature_names = [obj.featureExtractor.featureGroups.FeatureNames];
@@ -308,7 +368,7 @@ classdef CellExperiment < handle
                         for i = N_ch:-1:1
                             [tmpI,x,y] = getBlock(obj.Channel_TiffImgs(i), blck_x, blck_y);
                             if i == N_ch
-                                I = zeros([size(tmpI),3],'like',tmpI);
+                                I = zeros([size(tmpI),N_ch],'like',tmpI);
                             end
                             I(:,:,i) = CorrectionFunction{i}(tmpI,x,y);
                         end
@@ -321,7 +381,7 @@ classdef CellExperiment < handle
                         if obj.Use_GPU, I = gpuArray(I); end
                         Is = imfilter(I, obj.Channel_TiffImgs(1).Image_Smooth_Kernel,'symmetric'); clear I;
                         if obj.Use_GPU, I = gather(Is); clear Is; end
-
+                        
                         % Extract object features from curret block
                         x_i = obj.featureExtractor.Compute(BW,I, [t.xEdges(blck_x),t.yEdges(blck_y)]);
 
@@ -344,58 +404,97 @@ classdef CellExperiment < handle
                 features(object_count:end,:) = [];
                 
                 % Post-process object intensities
-                % If an image channel has an
-                % ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression,
-                % then subract that offset from all integrated intensity
-                % features. Additionally, divide this offset by the object
-                % area, and subtract this mean intensity correction from
-                % all mean intensity features.
-                
-                % All feature group channels and feature group names
-                featChannels = [obj.featureExtractor.featureGroups.Channel];
-                featNames = [obj.featureExtractor.featureGroups.GroupName];
-                crctn = line('XData',[],'YData',[],'Parent',[]);
-                
-                % Helpers
-                iif = @(varargin) varargin{2*find([varargin{1:2:end}], 1, 'first')}(); % inline if
-                curly = @(x, varargin) x{varargin{:}}; % extract cell array element - Use cell array for creating linear sequence of evaluations
-                doty = @(x, name) x.(name); % extract object property
-                
-                channels_withPostProc = find(~cellfun(@isempty, postProcIntegratedInt_Offset));
-                for i = channels_withPostProc
-                    chGroupIdx = find(obj.Channel_Names(i) == featChannels);
+                if require_IntOffset
+                    % If an image channel has an
+                    % ObjectIntegratedIntensity_FeaturePostProcess/
+                    % /_OffsetExpression, then subtract that offset from
+                    % all integrated intensity features. Additionally,
+                    % divide this offset by the object area, and subtract
+                    % this mean intensity correction from all mean
+                    % intensity features.
+
+                    if hasRequired
+                        % do nothing
+                    elseif computingRequired
+                        % Extracted needed information and save it
+                        if all(ismember(["Location","Shape"], featNames))
+                            centroids = features(:, startsWith(feature_names, "Location_Centroid"));
+                            areas = features(:, feature_names == "Shape_Area");
+                        else
+                            centroids = features(:, startsWith(feature_names, "BasicProps_Centroid"));
+                            areas = features(:, feature_names == "Basic_Props_Area");
+                        end
+                        obj.Object_Centroid = centroids;
+                        obj.Object_Area = areas;
+                    else
+                        % We added a BasicProps group to the front, use
+                        % this to get the required values and then remove
+                        % it from the features list
+                        % Added a BasicProps group
+                        centroids = features(:, startsWith(feature_names, "BasicProps_Centroid"));
+                        areas = features(:, feature_names == "Basic_Props_Area");
+                        obj.Object_Centroid = centroids;
+                        obj.Object_Area = areas;
+                        
+                        features(:,1:4) = [];
+                        feature_names(1:4) = [];
+                    end
                     
-                    % Create helpers that will allow for computing the
-                    % intensity correction and mean correction only once.
-                    % The intensity correction will be stored as XData in a
-                    % line handle, and the mean correction will be stored
-                    % as the YData in a line handle. A line handle is used
-                    % as a simple way of keeping the data arround.
-                    crctn.XData = []; crctn.YData = [];
-                    II_offset = @(x) iif(isempty(x.XData), doty(curly({set(x,'XData',postProcIntegratedInt_Offset{i}(obj.Object_Centroid(:,1),obj.Object_Centroid(:,2))),x},2),'XData'), true, x.XData);
-                    MuI_offset = @(x) iif(isempty(x.YData), doty(curly({set(x,'YData',II_offset(x)./obj.Object_Area),x},2),'YData'), true, x.YData);
-                    
-                    % Iterate over the feature groups of the current
-                    % channel
-                    for grp = chGroupIdx
-                        % Apply corrections depending on what type of
-                        % feature group it is
-                        switch featNames(chGroupIdx)
-                            case 'Intensity'
-                                II_idx = feature_names == "Intensity_" + obj.Channel_Names(i) + "_IntegratedIntensity";
-                                MuI_idx = feature_names == "Intensity_" + obj.Channel_Names(i) + "_MeanIntensity";
-                                features(:,II_idx) = features(:,II_idx) - II_offset(crctn);
-                                features(:,MuI_idx) = features(:,MuI_idx) - MuI_offset(crctn);
-                            case 'RadialIntensity'
-                                MuI_idx = startsWith(feature_names, "RadialIntensity_" + obj.Channel_Names(i) + "_Mean");
-                                features(:,MuI_idx) = features(:,MuI_idx) - MuI_offset(crctn);
-                            case 'Granularity'
-                                II_idx = startsWith(feature_names, "Granularity_" + obj.Channel_Names(i));
-                                features(:,II_idx) = features(:,II_idx) - II_offset(crctn);
-                            otherwise
-                                % No other channel needs to be corrected
+                    % All feature group channels and feature group names
+                    featChannels = [obj.featureExtractor.featureGroups.Channel];
+
+                    crctn = line('XData',[],'YData',[],'Parent',[]);
+
+                    % Helpers
+                    iif = @(varargin) varargin{2*find([varargin{1:2:end}], 1, 'first')}(); % inline if
+                    curly = @(x, varargin) x{varargin{:}}; % extract cell array element - Use cell array for creating linear sequence of evaluations
+                    doty = @(x, name) x.(name); % extract object property
+
+                    channels_withPostProc = find(~cellfun(@isempty, postProcIntegratedInt_Offset));
+
+                    for i = channels_withPostProc
+                        chGroupIdx = find(obj.Channel_Names(i) == featChannels);
+
+                        % Create helpers that will allow for computing the
+                        % intensity correction and mean correction only
+                        % once. The intensity correction will be stored as
+                        % XData in a line handle, and the mean correction
+                        % will be stored as the YData in a line handle. A
+                        % line handle is used as a simple way of keeping
+                        % the data arround. -- Note XData and YData are
+                        % stored as rows.
+                        crctn.XData = []; crctn.YData = [];
+                        II_offset = @(x) iif(isempty(x.XData), doty(curly({set(x,'XData',postProcIntegratedInt_Offset{i}(obj.Object_Centroid(:,1),obj.Object_Centroid(:,2))),x},2),'XData'), true, x.XData);
+                        MuI_offset = @(x) iif(isempty(x.YData), doty(curly({set(x,'YData',II_offset(x).'./obj.Object_Area),x},2),'YData'), true, x.YData);
+
+                        % Iterate over the feature groups of the current
+                        % channel
+                        for grp = chGroupIdx
+                            % Apply corrections depending on what type of
+                            % feature group it is
+                            switch featNames(grp)
+                                case 'BasicProps'
+                                    II_idx = feature_names == "BasicProps_Intensity_" + obj.Channel_Names(i) + "_Integrated";
+                                    features(:,II_idx) = features(:,II_idx) + II_offset(crctn).';
+                                case 'Intensity'
+                                    II_idx = feature_names == "Intensity_" + obj.Channel_Names(i) + "_Integrated";
+                                    MuI_idx = feature_names == "Intensity_" + obj.Channel_Names(i) + "_Mean";
+                                    features(:,II_idx) = features(:,II_idx) + II_offset(crctn).';
+                                    features(:,MuI_idx) = features(:,MuI_idx) + MuI_offset(crctn).';
+                                case 'RadialIntensity'
+                                    MuI_idx = startsWith(feature_names, "RadialIntensity_" + obj.Channel_Names(i) + "_Mean");
+                                    features(:,MuI_idx) = features(:,MuI_idx) + MuI_offset(crctn).';
+                                case 'Granularity'
+                                    II_idx = startsWith(feature_names, "Granularity_" + obj.Channel_Names(i));
+                                    features(:,II_idx) = features(:,II_idx) + II_offset(crctn).';
+                                otherwise
+                                    % No other feature group needs to be
+                                    % corrected
+                            end
                         end
                     end
+                    
+                    
                 end
                 
                 % Post-process Granularity features. We need to divide the
@@ -403,22 +502,25 @@ classdef CellExperiment < handle
                 % *This needs to happen after the intensity correction,
                 % which is why it must be done here.*
                 gran_idx = find(featNames == "Granularity");
-                toRemove = zeros(numel(gran_idx)); % need to remove one feature for each Granularity group.
-                names = {groups.FeatureNames};
+                names = {obj.featureExtractor.featureGroups.FeatureNames};
                 num_xi = cumsum([0,cellfun(@numel, names)]); % group bounds
+%                 ["is0 : " + string(sum(features==0,1)'), "isnan : " + string(sum(isnan(features),1)'), feature_names']
                 
                 for i = gran_idx
-                    start_idx = num_xi(gran_idx);
-                    end_idx = num_xi(gran_idx+1);
-                    
-                    start_idx = start_idx + 1;
-                    toRemove(i) = start_idx;
+                    start_idx = num_xi(i) + 1;
+                    end_idx = num_xi(i+1);
                     
                     features(:,start_idx+1:end_idx) = features(:,start_idx+1:end_idx) ./ features(:,start_idx);
                 end
-                
+                toRemove = num_xi(gran_idx)+1;
                 features(:,toRemove) = [];
                 feature_names(toRemove) = [];
+                
+                
+                % Save features
+                save(saveToFileName,'features','feature_names')
+                obj.Feature_Names = feature_names;
+                obj.Feature_File = string(saveToFileName);
                 
             catch ME
                 for i = 1:N_ch, obj.Channel_TiffImgs(i).close(); end
@@ -670,6 +772,126 @@ classdef CellExperiment < handle
             end
             for i = 1:N_ch, tiffImgs(i).close(); end % Open all images
         end
+        
+        function [features, feature_names] = Load_Features(obj)
+            if isempty(obj.Feature_File)
+                error('Load_Features:noFeatureFile','Cannot load features because there is no Feature_File.')
+            end
+            
+            dat = load(obj.Feature_File);
+            features = dat.features;
+            feature_names = dat.feature_names;
+            if ~isequal(feature_names, obj.Feature_Names)
+                warning('Load_Features:FeatureNameMismatch','The names of the features loaded do not match the feature names saved with the object. Features could be in a different order or the features could wrong.')
+            end
+        end
+        
+        function summary = Create_Summary(obj)
+            if obj.Feature_File == ""
+                error('Create_Summary:missingFeatures','The features must be computed before a summary is made.')
+            end
+            
+            
+            [X,Xn] = Load_Features(obj);
+            
+            % Data summary -----------------------------------------------
+            minX = min(X)';
+            meanX = mean(X)';
+            maxX = max(X)';
+            stdX = std(X)';
+            madX = mad(X)';
+            medianX = median(X)';
+            isNan = sum(isnan(X),1)';
+            is0 = sum(X==0,1)';
+
+            summary = table(minX,meanX,maxX,stdX,madX,medianX,is0,isNan);
+            summary.Properties.RowNames = cellstr(Xn);
+            
+            % Plot DAPI vs Area ------------------------------------------
+            
+            % Flatten Area
+            a_flattener = interpolator2d(obj.DAPI_G1_Area.x,obj.DAPI_G1_Area.y,obj.DAPI_G1_Area.Z,false);
+            a = X(:,Xn=="Shape_Area") ./ a_flattener(X(:,1),X(:,2));
+            
+            d = X(:,Xn=="Intensity_DAPI_Integrated");
+            mpp = obj.Channel_TiffImgs(1).mmPerPixel;
+            inRange = a<6 & d<8;% & (X(:,1)*mpp>4 & X(:,1)*mpp<14) & (X(:,2)*mpp>4 & X(:,2)*mpp<14);
+
+%             figure
+%             [~,tp,tx] = kde(d(inRange),2^8,0,3);
+%             histogram(d(inRange),'BinLimits',[0,3])
+%             
+%             figure
+%             hold on
+%             [~,tp,tx] = kde(d(inRange),2^5,0,3);
+%             plot(tx,tp)
+%             [~,tp,tx] = kde(d(inRange),2^6,0,3);
+%             plot(tx,tp)
+%             [~,tp,tx] = kde(d(inRange),2^7,0,3);
+%             plot(tx,tp)
+%             [~,tp,tx] = kde(d(inRange),2^8,0,3);
+%             plot(tx,tp)
+%             
+%             figure
+%             hold on
+%             [~,tp,tx] = kde(d,2^5,0,3);
+%             plot(tx,tp)
+%             [~,tp,tx] = kde(d,2^6,0,3);
+%             plot(tx,tp)
+%             [~,tp,tx] = kde(d,2^7,0,3);
+%             plot(tx,tp)
+%             [~,tp,tx] = kde(d,2^8,0,3);
+%             plot(tx,tp)
+            
+            % Decimate
+            options = [];
+            options.gridType = 'hexagonal';
+            options.cleanHexagonData = true;
+            options.reductionMethod = 'density';
+            options.binSize = [0.025,1];
+            da_dcmt = decimateData(d(inRange),a(inRange),[],options);
+            
+            % Plot the dapi vs area density
+            plotOptions.colorData = da_dcmt.Z;
+            plotOptions.sizeData = 'sameAsColor';
+            plotOptions.colorScale = 'log';
+            plotOptions.sizeScale = 'none';
+            plotOptions.maxHexSize = 1;
+
+            hexplot([da_dcmt.X,da_dcmt.Y],options.binSize(1),options.binSize(2),plotOptions)
+            axis tight
+            xlabel('DAPI')
+            ylabel('Area')
+            title({char(obj.Experiment_Description), 'DAPI vs Area'})
+            colorbar;
+            drawnow;
+            setTheme(gcf,'dark')
+            
+            % Plot DAPI --------------------------------------------------
+            figure
+            line(X(:,1)*obj.Channel_TiffImgs(1).mmPerPixel,X(:,2)*obj.Channel_TiffImgs(1).mmPerPixel,d,'marker','.','markersize',1,'linestyle','none','color','g');
+            title({char(obj.Experiment_Description); 'DAPI Integrated Intensity'})
+            xlabel('x / mm')
+            ylabel('y / mm')
+            axis tight
+            zlim([0,3])
+            view(30,10)
+            setTheme(gcf,'dark')
+            
+            % Plot GFP ---------------------------------------------------
+            gfp = X(:,contains(Xn,'Intensity_GFP_Integrated'));
+            figure
+            line(X(:,1)*obj.Channel_TiffImgs(1).mmPerPixel,X(:,2)*obj.Channel_TiffImgs(1).mmPerPixel,gfp,'marker','.','markersize',1,'linestyle','none','color','g');
+            title({char(obj.Experiment_Description); 'GFP Integrated Intensity'})
+            xlabel('x / mm')
+            ylabel('y / mm')
+            axis tight
+            zlim(prctile(gfp,[0.1 99]))
+            view(30,10)
+            setTheme(gcf,'dark')
+            
+        end
+        
     end
 
     methods %(Access = private)
@@ -684,11 +906,7 @@ classdef CellExperiment < handle
         function clearCorrections(obj)
             for i = 1:numel(obj.Channel_TiffImgs)
                 % clear backgrounds and foregrounds
-                obj.Channel_TiffImgs(i).BG_offset = [];
-                obj.Channel_TiffImgs(i).BG_stripeX = [];
-                obj.Channel_TiffImgs(i).FG_offset = [];
-                obj.Channel_TiffImgs(i).FG_factor = [];
-                obj.Channel_TiffImgs(i).FG_stripeX = [];
+                obj.Channel_TiffImgs(i).clearCorrections();
             end
         end
     end
