@@ -81,6 +81,9 @@ classdef FeatureExtractor
                 if isa(groups(i),'Location')
                     xi(:,1:4) = xi(:,1:4) + [Image_Offset, Image_Offset];
                 end
+                if isa(groups(i),'BasicProps')
+                    xi(:,1:2) = xi(:,1:2) + Image_Offset;
+                end
                 x(:, num_xi(i)+1:num_xi(i+1)) = xi;
             end
         end
