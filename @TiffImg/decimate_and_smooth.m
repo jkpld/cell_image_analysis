@@ -36,7 +36,22 @@ sR = p.Results.smoothingRadius;
 sType = p.Results.smoothType;
 options = p.Unmatched; % options to pass through to decimateData
 
+% offset the hexagons so that the first one starts in the corner of the
+% data (not centered at 0 0).
+if strcmp(options.gridType,'hexagonal')
+    Xoffset = 0.9*options.binSize(1)/2;
+    Yoffset = 0.9*prod(options.binSize)/2;
+    
+    x = x - Xoffset;
+    y = y - Yoffset;
+end
+
 [dcmt, options] = decimateData(x,y,z,options);
+
+if strcmp(options.gridType,'hexagonal')
+    dcmt.X = dcmt.X + Xoffset;
+    dcmt.Y = dcmt.Y + Yoffset;
+end
 
 if isfinite(sR)
     switch options.gridType
@@ -65,7 +80,7 @@ S.Z = Z;
 
 if nargout > 1
     if ~any(size(Z)==1) % assume the data is gridded
-        f = griddedInterpolant(Y,X,Z);
+        f = griddedInterpolant(Y',X',Z);
         fun = @(x,y) f(y,x);
     else
         fun = scatteredInterpolant(X,Y,Z);
