@@ -25,8 +25,10 @@ function [FG_f, FG_o, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(tiffIm
 
 % James Kapaldo
 
+mmPP = tiffImg.mmPerPixel;
+
 % Nuclei density
-imageArea = prod(tiffImg.imageSize*tiffImg.mmPerPixel);
+imageArea = prod(tiffImg.imageSize*mmPP);
 rho = numel(x)/imageArea; % nuclei/mm^2
 
 if nargin < 6
@@ -37,40 +39,41 @@ if nargin < 6
         'reductionMethod', 'mode', ...
         'gridType', 'hexagonal', ...
         'cleanHexagonData', true, ...
-        'binSize', [bin/tiffImg.mmPerPixel,1], ... % 1.5/mmPerPixel
-        'smoothingRadius',smooth/tiffImg.mmPerPixel, ... % 4/mmPerPixel
+        'binSize', [bin/mmPP,1], ... % 1.5/mmPerPixel
+        'smoothingRadius',smooth/mmPP, ... % 4/mmPerPixel
         'defaultValue',1);
 else
-    bin = options.binSize(1)*tiffImg.mmPerPixel;
+    bin = options.binSize(1)*mmPP;
 end
-bin
+
 DEBUG = 1;
 
-% Initial correction. ----------------------------------------------------
+%% Initial correction. ----------------------------------------------------
 
-% Flatten the g1 band with a large smoothing radius try and remove any edge
-% effects.
-options.smoothingRadius = 5*bin/tiffImg.mmPerPixel;
-[~,DAPI_mode] = TiffImg.decimate_and_smooth(x, y, dapi, options);
+% Flatten the g1 band with a large smoothing radius. This will be used to
+% remove outliers.
+options.smoothingRadius = 5*bin/mmPP;
+[G1_0,DAPI_mode] = TiffImg.decimate_and_smooth(x, y, dapi, options);
 dapi_c = dapi ./ DAPI_mode(x,y);
-% x(toRemove) = [];
-% y(toRemove) = [];
-% dapi(toRemove) = [];
 
 % Flatten the g1 band and position it approximately at 1 (assuming the G1
 % band is the mode)
-options.smoothingRadius = 2.5*bin/tiffImg.mmPerPixel;
+options.smoothingRadius = 2.5*bin/mmPP;
 idx = dapi_c > 0.5 & dapi_c < 1.5;
 [G1_1,DAPI_mode] = TiffImg.decimate_and_smooth(x(idx), y(idx), dapi(idx), options);
 dapi_c = dapi ./ DAPI_mode(x,y);
 
 if DEBUG
     figure
+    hold on
     tri = delaunay(G1_1.X,G1_1.Y);
     trisurf(tri,G1_1.X,G1_1.Y,G1_1.Z);
+    tri = delaunay(G1_0.X,G1_0.Y);
+    trisurf(tri,G1_0.X,G1_0.Y,G1_0.Z);
     line(x,y,dapi,'marker','.','linestyle','none','color','g','markersize',1)
     title('original data with fitted surface')
     setTheme(gcf,'dark')
+    drawnow
     
     figure
     line(x,y,dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
@@ -80,40 +83,42 @@ if DEBUG
     zlim([0,3])
     view(0,0)
 end
-% error('some err')
-% Remove the stripe artifact with two iterations of fitting. -------------
 
-[G1_stripe, G1_stripeX, ~, fsample] = Fit_Stripe_Artifact(x*tiffImg.mmPerPixel,dapi_c,'Threshold',1e-2,'generatePlots',DEBUG);
-G1_stripeX = G1_stripeX/tiffImg.mmPerPixel;
+%% Remove the stripe artifact. ------------------------------------------
 
-size(G1_stripe)
-G1_stripe = G1_stripe(:);
-G1_stripeX = G1_stripeX(:);
-if isnan(tiffImg.stripeWidth)
-    maxPeriod = 3;
+[G1_stripe, G1_stripeX, ~, fsample] = Fit_Stripe_Artifact(x*mmPP,dapi_c,'Threshold',1e-2,'generatePlots',DEBUG);
+
+if isempty(fsample)
+    % No stripe was detected
+    Xstripe = [];
 else
-    maxPeriod = 3*tiffImg.stripeWidth*tiffImg.mmPerPixel;
+    % Covert locations back to pixels
+    G1_stripeX = G1_stripeX/mmPP;
+
+    % Make columns
+    G1_stripe = G1_stripe(:);
+    G1_stripeX = G1_stripeX(:);
+    
+    % Get maximum period for highpass filter
+    if isnan(tiffImg.stripeWidth)
+        maxPeriod = 3;
+    else
+        maxPeriod = 3*tiffImg.stripeWidth*mmPP;
+    end
+
+    % Sent the computed stripe through a highpass filter and then recenter
+    % at 1.
+    G1_stripe = highpass(G1_stripe,maxPeriod,1/fsample) + 1;
+    
+    % Apply stripe correction
+    dapi_c = dapi_c ./ nakeinterp1(G1_stripeX(:), G1_stripe(:), x);
+
+    % Interpolate the stripe to all for each x-pixel of the image.
+    Xstripe = nakeinterp1(G1_stripeX(:), G1_stripe(:), (1:tiffImg.imageSize(2)).');
+    Xstripe = Xstripe'; %should be row.
 end
-maxPeriod
 
-G1_stripe = highpass(G1_stripe,maxPeriod,1/fsample) + 1;
-dapi_c = dapi_c ./ nakeinterp1(G1_stripeX(:), G1_stripe(:), x);
-
-if DEBUG
-   
-    figure
-    line(x,y,dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
-    title('after stripe correction')
-    setTheme(gcf,'dark')
-    axis tight
-    zlim([0,3])
-    view(0,0)
-end
-
-% Select the g1 band. Compute the median dapi value along small x-slices to
-% extract the stripe. Divide the stripe away.
-
-% Flatten the G1 band, again. --------------------------------------------
+%% Flatten the G1 band, again. --------------------------------------------
 
 % Select the g1 band. Fit the mode with a smooth surface. Divide the
 % surface away.
@@ -123,40 +128,74 @@ idx = dapi_c > 0.7 & dapi_c < 1.3;
 [G1_2, DAPI_G1_mode] = TiffImg.decimate_and_smooth(x(idx), y(idx), dapi_c(idx), options);
 dapi_c = dapi_c ./ DAPI_G1_mode(x,y);
 
-% Flatten the G2 band. ---------------------------------------------------
+%% Flatten the G2 band. ---------------------------------------------------
+% Flattening the G2 band can be more difficult as it could be much less
+% dence than the G1 band[1]. Thus, the fitting uses a more envolved
+% reductionMethod() for the decimation.
+%
+% [1] : The cells I wrote this code for spend about 80% of there time, or
+% much more, in G1 phase.
 
-% Select the g2 band. Fit the mode with a smooth surface. Divide the
-% surface away.
+% Approximately select the G2 band
 idx = dapi_c > 1.8 & dapi_c < 2.8;
 
+% Get the bin size for use with the G2 band
 nucleiPerBin = 300; % emperical
 bin = sqrt( (2/sqrt(3)) * nucleiPerBin * imageArea / sum(idx) );
+fprintf('dapi bin size : %f\n', bin)
 
-options.defaultValue = nan;
-figure
+% Compute the histogram of the G2 band accross the entire image. The
+% maximum value should give the approximate location of the G2 band. Note,
+% that we can expect the G2 band to be mostly flat because it should
+% ideally be exactly twice the G1 band, and since we have already flattened
+% the G1 band, the G2 band should ideally be flat. In reality, the G2 band
+% can have small changes accross the image for the same reason the G2 band
+% is not located at 2 after correction the G1 band.
 [nn,edg] = histcounts(dapi_c(idx),'BinWidth',0.05);
 cnt = edg(1:end-1) + diff(edg)/2;
+% flip the count and centers so that maximum returns the largest center if
+% two bins have the same count.
 nn = flip(nn);
 cnt = flip(cnt);
 [~,nI] = max(nn);
 cnt = cnt(nI);
+% This center will be used to create a weighting gaussian in the
+% reductionMethod below.
 
 % figure
 % ax1 = axes;
 % hold on
+
     function v = reductionMethod(x)
-        [n,edgs] = histcounts(x,'BinWidth',0.05);
+        % Idea : 
+        % * Compute the histogram of the points.      
+        % * Weight the counts using a gaussian with a FWHM of 1 centered on
+        % the previously computed average G2 center. (This weighing helps
+        % select the best value when several bins have almost the same
+        % count accros the G2 band.)
+        % * Do not accept the value if it is the smallest possible bin
+        % center.
+        % * Do not consider the image region if it only had a single bin
+        % * Do not consider the image region if the maximum count value is
+        % about the minimum requested density.
         
+        % Bin the data of the image region
+        [n,edgs] = histcounts(x,'BinWidth',0.05);
         cnts = edgs(1:end-1) + diff(edgs)/2;
+        
+        % Weight the data with the gaussian
         n = n.*exp(-(cnts-cnt).^2/(2*(1/2.355)^2)); % weight the counts towards the approximate value
         
         [n,sI] = sort(n,'descend');
         cnts = cnts(sI);
+        
+        % Do not use the result if there was only one bin
         if numel(n)==1
             v = nan;
             return;
         end
-        if sI(1)==1 % do not consider the smallest value
+        % Do not consider the smallest value
+        if sI(1)==1 
             n(1) = [];
             cnts(1) = [];
         end
@@ -178,12 +217,15 @@ cnt = cnt(nI);
 %         end
 %         [v, n(1), 1.2*nucleiPerBin/numel(n)]
     end
-options.reductionMethod = @reductionMethod; % Use median instead of mode as the distribution is not that narrow.
 
+% Set the options
 smooth = 2.5*bin;
-options.binSize = [bin/tiffImg.mmPerPixel,1]; % [2.5/tiffImg.mmPerPixel,1];
-options.smoothingRadius = smooth/tiffImg.mmPerPixel; % 6/tiffImg.mmPerPixel;
+options.reductionMethod = @reductionMethod; % Use median instead of mode as the distribution is not that narrow.
+options.defaultValue = nan;
+options.binSize = [bin/mmPP,1]; % [2.5/mmPP,1];
+options.smoothingRadius = smooth/mmPP; % 6/mmPP;
 
+% Compute the G2 band
 [G2_1, DAPI_G2_mode] = TiffImg.decimate_and_smooth(x(idx), y(idx), dapi_c(idx), options);
 
 if DEBUG
@@ -192,7 +234,7 @@ if DEBUG
     tsh = trisurf(tri,G2_1.X,G2_1.Y,G2_1.Z);
     shading interp
     tsh.EdgeColor = 'k';
-%     surface(G2_1.X,G2_1.Y,G2_1.Z);
+
     line(x, y, dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
     title('G2 surface fit')
     setTheme(gcf,'dark')
@@ -201,26 +243,20 @@ if DEBUG
     zlim([0.5,2.8])
     view(0,90)
 end
-% error('someerr')
+
+
+% This is only an approximate correction that will be used for displaying
+% results if debugging
 dapi_c = ((dapi_c-1) ./ (DAPI_G2_mode(x,y)/2)) + 1; % dapi_c = dapi_c ./ (DAPI_G2_mode(x,y)/2); % 
 
+% We want to have the G1 band at 1 and the G2 band at 2; therefore, the
+% correction surface is
+%
+% (dapi_norm - 1) = (dapi - g1) * (2 - 1) / (g2 - g1)
 % dapi_norm = dapi / (g2 - g1) - g1 / (g2-g1) + 1
-% FG <-- (g2 - g1)
-% BG <-- BG + 1 - g1/(g2-g1)
-
-% Remove any stripe artifact from the G2 band. ---------------------------
-
-% Select the g2 band. Compute the median dapi value along small x-slices to
-% extract the stripe. Divide the stripe away.
-
-% idx = dapi_c > 1.7 & dapi_c < 2.3;
-% G2_stripe = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[stripeBinWidth,100],'defaultValue',2);
-% dapi_c = dapi_c ./ (nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x)/2) ;
-
-% idx = dapi_c > 0.7 & dapi_c < 1.3; % Get G1 band
-% G1_stripe3 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[stripeBinWidth,100],'defaultValue',1);  % Get median dapi value from bins 100 pixels wide along x direction
-% G1_stripe3.Z = highpass(G1_stripe3.Z(:,2),2.5,100*tiffImg.mmPerPixel) + 1;
-% dapi_c = dapi_c ./ nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), x); % Divide out the median value
+%
+% FG_f <-- (g2 - g1)
+% FG_o <--1 - g1/(g2-g1)
 
 
 if DEBUG
@@ -240,16 +276,8 @@ end
 
 % Combine all results into a single smooth surface and stripe. -----------
 
-% Interpolate the stripe to all for each x-pixel of the image.
-Xstripe = nakeinterp1(G1_stripeX(:), G1_stripe(:), (1:tiffImg.imageSize(2)).');
-% Xstripe = nakeinterp1(G1_stripe1.X(:,1), G1_stripe1.Z(:,1), (1:tiffImg.imageSize(2)).') ...
-%     .* nakeinterp1(G1_stripe2.X(:,1), G1_stripe2.Z(:,1), (1:tiffImg.imageSize(2)).');% ...
-%     .* nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), (1:tiffImg.imageSize(2)).');% ...
-%     .* nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1)/2, (1:tiffImg.imageSize(2)).');
 
-Xstripe = Xstripe'; %should be row.
-figure
-plot(Xstripe)
+
 % Construct the flattening surface
 
 % Each flattening surface could have a different number of points. If this
@@ -263,13 +291,13 @@ yg = tiffImg.BG_offset.y;
 
 if isequal(G1_1.X,G1_2.X) && isequal(G1_2.X,G2_1.X)
     
+    % Combine the two G1 surfaces
     Z = G1_1.Z .* G1_2.Z;
     X = G1_1.X;
     Y = G1_1.Y;
     
-    % This surface would need to be evaluated using scattered interpolants;
-    % however, this is quite slow to evaluate, so reinterplate onto the same
-    % square grid
+    % Scattered interpolants are quite slow to evaluate, so reinterplate
+    % onto the same square grid
     fun = scatteredInterpolant(double(X),double(Y),double(Z));
     G1z = fun({xg,yg})';
     
@@ -285,9 +313,10 @@ else
     fun = scatteredInterpolant(double(G2_1.X),double(G2_1.Y),double(G2_1.Z));
     G2z = fun({xg,yg})';
     
-    G1z = G1z1 .* G1z2;% .* G2_1Z/2;
+    G1z = G1z1 .* G1z2;
 end
 
+% G2z is currently relative to G1z, make it so that it is not
 G2z = G2z.*G1z;
 
 FG_f.Z = (G2z-G1z);
@@ -297,20 +326,20 @@ FG_f.y = yg;
 FG_o = FG_f;
 FG_o.Z = 1 - G1z./(G2z-G1z);
 
-% Compute the G1 area surface --------------------------------------------
+%% Compute the G1 area surface --------------------------------------------
 if nargout > 3
     nucleiPerBin = 800; % emperical
     bin = sqrt( (2/sqrt(3)) * nucleiPerBin / rho );
     smooth = 2.5*bin;
     idx = dapi_c > 0.7 & dapi_c < 1.3;
     options.defaultValue = nan;
-    options.binSize = [bin/tiffImg.mmPerPixel,1]; % [2.5/tiffImg.mmPerPixel,1];
-    options.smoothingRadius = smooth/tiffImg.mmPerPixel; % 6/tiffImg.mmPerPixel;
+    options.binSize = [bin/mmPP,1]; % [2.5/mmPP,1];
+    options.smoothingRadius = smooth/mmPP; % 6/mmPP;
     options.reductionMethod = 'median';
     [G1_area, G1_area_fun]  = TiffImg.decimate_and_smooth(x(idx), y(idx), area(idx), options);
-%     area_c = area./G1_area_fun(x,y);
-%     
-%     [G1_stripe, G1_stripeX, ~, fsample] = Fit_Stripe_Artifact(x(idx)*tiffImg.mmPerPixel,area_c(idx),'Threshold',1e-2,'generatePlots',DEBUG);
+
+    area_c = area./G1_area_fun(x,y);
+    [G1_stripe, G1_stripeX, ~, fsample] = Fit_Stripe_Artifact(x(idx)*mmPP,area_c(idx),'Threshold',1e-2,'generatePlots',DEBUG);
     
     % interpolate onto the same square grid as the threshold
     fun = scatteredInterpolant(double(G1_area.X), double(G1_area.Y), double(G1_area.Z));
@@ -336,13 +365,16 @@ if nargout > 4
 end
 
 if DEBUG
-    class(Xstripe)
-    
+        
     FG_f_fun = @(x,y) interp2mex(FG_f.Z, nakeinterp1(xg(:),(1:size(FG_f.Z,2))',x), nakeinterp1(yg(:),(1:size(FG_f.Z,1))',y));%griddedInterpolant({yg,xg},Z,'linear','nearest');%
     FG_o_fun = @(x,y) interp2mex(FG_o.Z, nakeinterp1(xg(:),(1:size(FG_o.Z,2))',x), nakeinterp1(yg(:),(1:size(FG_o.Z,1))',y));%griddedInterpolant({yg,xg},Z,'linear','nearest');%
-    FG_s = @(x) nakeinterp1((1:tiffImg.imageSize(2)).', Xstripe(:), x);
     
-    dapi_c = (dapi) ./ (FG_s(x).*FG_f_fun(x,y)) + FG_o_fun(x,y);
+    if isempty(Xstripe)
+        dapi_c = (dapi) ./ (FG_f_fun(x,y)) + FG_o_fun(x,y);
+    else
+        FG_s = @(x) nakeinterp1((1:tiffImg.imageSize(2)).', Xstripe(:), x);
+        dapi_c = (dapi) ./ (FG_s(x).*FG_f_fun(x,y)) + FG_o_fun(x,y);
+    end
     
     figure
     line(x,y,dapi_c,'marker','.','linestyle','none','color','g','markersize',1)
@@ -354,3 +386,19 @@ if DEBUG
     histogram(ax,dapi_c,'BinEdges',h.BinEdges,'FaceColor','r')
 end
 end
+
+
+
+% Remove any stripe artifact from the G2 band. ---------------------------
+
+% Select the g2 band. Compute the median dapi value along small x-slices to
+% extract the stripe. Divide the stripe away.
+
+% idx = dapi_c > 1.7 & dapi_c < 2.3;
+% G2_stripe = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[stripeBinWidth,100],'defaultValue',2);
+% dapi_c = dapi_c ./ (nakeinterp1(G2_stripe.X(:,1), G2_stripe.Z(:,1), x)/2) ;
+
+% idx = dapi_c > 0.7 & dapi_c < 1.3; % Get G1 band
+% G1_stripe3 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[stripeBinWidth,100],'defaultValue',1);  % Get median dapi value from bins 100 pixels wide along x direction
+% G1_stripe3.Z = highpass(G1_stripe3.Z(:,2),2.5,100*mmPP) + 1;
+% dapi_c = dapi_c ./ nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), x); % Divide out the median value

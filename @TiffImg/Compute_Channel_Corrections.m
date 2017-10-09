@@ -39,6 +39,9 @@ if nargin < 5 || isempty(options)
         'binSize', [bin/tiffImg.mmPerPixel,1], ... % 1.5/mmPerPixel
         'smoothingRadius',smooth/tiffImg.mmPerPixel, ... % 4/mmPerPixel
         'defaultValue',1);
+else
+    bin = 1.5;
+    smooth = 2.5*bin;
 end
 
 if nargin < 6
@@ -49,21 +52,25 @@ end
 
 DEBUG = 1;
 
-if DEBUG
-    figure %#ok<*UNRCH>
-    line(x,y,I,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
-    title(['Initial data : channel ' name])
-    view(0,0)
-    setTheme(gcf,'dark')
-end
 
 % Remove the stripe artifact. --------------------------------------------
 
 % First flatten the intensity data.
-[~, flattener] = TiffImg.decimate_and_smooth(x, y, I, options);
+options.smoothingRadius = 5*bin/tiffImg.mmPerPixel;
+[fltnr, flattener] = TiffImg.decimate_and_smooth(x, y, I, options);
 I_c = I ./ flattener(x,y);
 
 if DEBUG
+    figure %#ok<*UNRCH>
+    tri = delaunay(fltnr.X,fltnr.Y);
+    trisurf(tri,fltnr.X,fltnr.Y,fltnr.Z);
+    line(x,y,I,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
+    title(['Initial data with flattening surface: channel ' name])
+    view(0,0)
+    setTheme(gcf,'dark')
+    axis tight
+    zlim([0,100])
+    
     figure
     line(x,y,I_c,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
     title(['Flattened data before x stripe correction : channel ' name])
@@ -72,41 +79,70 @@ if DEBUG
 end
 
 % Now compute the stripe with two iterations
-idx = I_c > 0.6 & I_c < 1.4; % Get data around flattened region
-Xstripe1 = decimateData(x(idx),ones(sum(idx),1),I_c(idx),'binSize',[100,100],'defaultValue',1); % Get median dapi value from bins 100 pixels wide along x direction
-Xstripe1.Z = highpass(Xstripe1.Z(:,2),3,100*tiffImg.mmPerPixel) + 1;
-I_c = I_c ./ nakeinterp1(Xstripe1.X(:,1), Xstripe1.Z(:,1), x); % Divide out the median value
 
-idx = I_c > 0.7 & I_c < 1.3; % Get data around flattened region
-Xstripe2 = decimateData(x(idx),ones(sum(idx),1),I_c(idx),'binSize',[100,100],'defaultValue',1); % Get median dapi value from bins 100 pixels wide along x direction
-Xstripe2.Z = highpass(Xstripe2.Z(:,2),3,100*tiffImg.mmPerPixel) + 1;
+[Xstripe1, stripe_x, ~, fsample] = Fit_Stripe_Artifact(x*tiffImg.mmPerPixel,I_c,'Threshold',1e-2,'generatePlots',DEBUG);
 
-% Combine stripe corrections
-xg = (1:tiffImg.imageSize(2)).';
-Xstripe = nakeinterp1(Xstripe1.X(:,1), Xstripe1.Z(:,1), xg) ...
-    .* nakeinterp1(Xstripe2.X(:,1), Xstripe2.Z(:,1), xg);
+if isempty(fsample)
+    % No stripe was detected
+    Xstripe = [];
+    I_c = I;
+else
+    stripe_x = stripe_x/tiffImg.mmPerPixel;
 
-Xstripe = Xstripe'; %should be row.
+    size(Xstripe1)
+    Xstripe1 = Xstripe1(:);
+    stripe_x = stripe_x(:);
+    if isnan(tiffImg.stripeWidth)
+        maxPeriod = 3;
+    else
+        maxPeriod = 3*tiffImg.stripeWidth*tiffImg.mmPerPixel;
+    end
 
-I_c = I ./ nakeinterp1(xg, Xstripe, x);
-
-if DEBUG    
-    figure
-    line(x,y,I_c,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
-    title(['After x stripe correction (without flattening) : channel ' name])
-    view(0,0)
-    setTheme(gcf,'dark')
+    Xstripe1 = highpass(Xstripe1,maxPeriod,1/fsample) + 1;
+    I_c = I ./ nakeinterp1(stripe_x, Xstripe1, x);
     
-    figure
-    line(xg*tiffImg.mmPerPixel,Xstripe,'color','y')
-    title(['XStripe : channel ' name])
-    setTheme(gcf,'dark')
+    xg = (1:tiffImg.imageSize(2)).';
+    Xstripe = nakeinterp1(stripe_x, Xstripe1, xg);
+    Xstripe = Xstripe';
 end
 
+% 
+% % idx = I_c > 0.6 & I_c < 1.4; % Get data around flattened region
+% idx = I_c > 0 & I_c < 4; % Get data around flattened region
+% Xstripe1 = decimateData(x(idx),ones(size(x(idx))),I_c(idx),'binSize',[200,100],'defaultValue',1,'reductionMethod','mad'); % Get median dapi value from bins 100 pixels wide along x direction
+% % Xstripe1 = decimateData(x(idx),ones(sum(idx),1),I_c(idx),'binSize',[100,100],'defaultValue',1,'reductionMethod','std'); % Get median dapi value from bins 100 pixels wide along x direction
+% % Xstripe1.Z = highpass(Xstripe1.Z(:,2),3,100*tiffImg.mmPerPixel) + 1;
+% I_c = I_c ./ nakeinterp1(Xstripe1.X(:,1), Xstripe1.Z(:,1), x); % Divide out the median value
+% figure
+% plot(Xstripe1.X(:,2),Xstripe1.Z(:,2))
+% idx = I_c > 0.7 & I_c < 1.3; % Get data around flattened region
+% % Xstripe2 = decimateData(x(idx),ones(sum(idx),1),I_c(idx),'binSize',[100,100],'defaultValue',1); % Get median dapi value from bins 100 pixels wide along x direction
+% % Xstripe2.Z = highpass(Xstripe2.Z(:,2),3,100*tiffImg.mmPerPixel) + 1;
+% 
+% % Combine stripe corrections
+% xg = (1:tiffImg.imageSize(2)).';
+% Xstripe = nakeinterp1(Xstripe1.X(:,1), Xstripe1.Z(:,1), xg) ...
+%     .* nakeinterp1(Xstripe2.X(:,1), Xstripe2.Z(:,1), xg);
+% 
+% Xstripe = Xstripe'; %should be row.
+% 
+% I_c = I ./ nakeinterp1(xg, Xstripe, x);
+% 
+
 % Compute flattening surface. --------------------------------------------
-nucleiPerBin = 800; % emperical
+% Nuclei density
+p2to4 = prctile(I_c,[2,4]);
+
+rho = sum(I_c>=p2to4(1) & I_c<=p2to4(2))/prod(tiffImg.imageSize*tiffImg.mmPerPixel); % nuclei/mm^2
+
+nucleiPerBin = 200; % emperical
 bin = sqrt( (2/sqrt(3)) * nucleiPerBin / rho );
-smooth = 1.5*bin;
+if bin > 3
+    bin = 3;
+    nucleiPerBin = bin^2 * rho / (2/sqrt(3));
+end
+
+smooth = 2.5*bin;
     
 options.binSize = [bin/tiffImg.mmPerPixel,1]; % [2.5/tiffImg.mmPerPixel,1];
 options.smoothingRadius = smooth/tiffImg.mmPerPixel; % 6/tiffImg.mmPerPixel;
@@ -115,7 +151,14 @@ options.defaultValue = nan;
 % Decimate data using the mean of the data in the 2-4% range
     function v = reductionMethod(x)
         prct = prctile(x,[2,4]);
-        v = mean(x(x>=prct(1) & x<=prct(2)));
+        idx = x>=prct(1) & x<=prct(2);
+        
+        v = mean(x(idx));
+%         [numel(idx), sum(idx), v]
+        if sum(idx) < 0.5*nucleiPerBin
+            v = nan;
+        end
+        
     end
 options.reductionMethod = @reductionMethod;
 
@@ -135,10 +178,15 @@ flatteningSurface.y = yg;
 
 if DEBUG
     figure
-    line(x,y,I_c,'Marker','.','MarkerSize',1,'LineStyle','none','Color','y')
+    tri = delaunay(S.X,S.Y);
+    trisurf(tri,S.X,S.Y,S.Z);
+    line(x,y,I_c,'Marker','.','MarkerSize',1,'LineStyle','none','Color','g')
     surface(flatteningSurface.x,flatteningSurface.y,flatteningSurface.Z)
     title(['Channel staining correction (2-4% value, after stripe crrctn) : channel ' name])
     setTheme(gcf,'dark')
+    axis tight
+    zlim([0.9*min(S.Z(:)),1.1*max(S.Z(:))])
+
 end
 
 end
