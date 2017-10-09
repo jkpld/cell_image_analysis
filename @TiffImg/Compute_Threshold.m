@@ -27,9 +27,17 @@ try
     
     if applyCorrectionsFirst
         CorrectionFunction = generateCorrectionFunction(tiffImg);
+        % Offset by the median background value
+%         if ~isempty(tiffImg.BG_offset)
+%             mBG = median(tiffImg.BG_offset.Z(:))
+%             CorrectionFunction = @(I,x,y) CorrectionFunction(I,x,y) + mBG;
+%         end
+        scale = 'linear';
+    else
+        scale = 'log';
     end
-        
-    progress = displayProgress(tiffImg.numBlcks(2),'number_of_displays', 15,'active',tiffImg.Verbose,'name','Computing threshold,');
+%         scale = 'log';
+    progress = displayProgress(tiffImg.numBlcks(2),'number_of_displays', 15,'active',tiffImg.Verbose,'name',sprintf('Computing threshold (%s),',scale));
     progress.start();
     
     % Iterage over x blocks
@@ -61,16 +69,23 @@ try
 %             if any(I(:)>1)
 %                 fprintf('larger than 1!\n')
 %             end
-            threshold(blck_y,blck_x) = tiffImg.otsuthresh_scale(I,'log');
+% figure
+% histogram(I)
+            threshold(blck_y,blck_x) = tiffImg.otsuthresh_scale(I,scale);
+%             threshold(blck_y,blck_x)
         end % y block
         
         tiffImg.close(); % Prevent memory buildup
         progress.iteration_end(); % Update progress counter
     end % x block
     
-    % Increase the threshold slightly. The log scale is a bit low.
-    threshold = 1.2 * threshold;
+%     error(' some error')
     
+    % Increase the threshold slightly. The log scale is a bit low.
+    if strcmp(scale,'log')
+        threshold = 1.2 * threshold;
+    end    
+    threshold = medfilt2(threshold,[3,3],'symmetric');
     % Smooth the threshold surface
     threshold = smoothSurf(tiffImg, threshold);
     
@@ -86,6 +101,9 @@ try
     tiffImg.Threshold_After_Correction = applyCorrectionsFirst;
     % Save the current correction expression
     tiffImg.Threshold_CorrectionsExpression = tiffImg.Current_Image_Correction_Expression;
+    if applyCorrectionsFirst
+        tiffImg.Threshold_Correction = generateCorrectionFunction(tiffImg);
+    end
     
     % Output the threshold matrix if requested.
     if nargout > 0
