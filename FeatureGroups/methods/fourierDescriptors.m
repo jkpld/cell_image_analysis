@@ -7,7 +7,7 @@ function [Z, Z_shapeReproduction] = fourierDescriptors(B,N1,N2,useParallel)
 %   B : cell array of object boundaries (as returned by bwboundaries).
 %   N1 : The number of elements that all boundaries will first be resized
 %     to.
-%   N2 : The number of fourier descripters returned.
+%   N2 : The number of fourier descripters returned. (Should be evan!)
 %   useParallel : Logical flag. If true, then the boundaries will be
 %     resized in parallel.
 %
