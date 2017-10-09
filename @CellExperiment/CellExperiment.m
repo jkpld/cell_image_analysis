@@ -148,48 +148,70 @@ classdef CellExperiment < handle
                 t.FG_factor = FG_f;
                 t.FG_stripeX = Xstripe;
 
-                % Set the Area_Normalizer of the nucleiPartitioner
-                FG_o_fun = interpolator2d(FG_o.x, FG_o.y, FG_o.Z, false);
-                obj.nucleiPartitioner.Intensity_Normalizer = @(I,x,y) I + FG_o_fun(x,y);
-                
                 if thresholdCorrectedImage
                     % Use the background and foreground corrected image to
                     % create -potentially better- object masks. This takes a
                     % bit longer.
 
-                    minFG = min(t.FG_factor.Z(:));
-                    t.FG_factor.Z = t.FG_factor.Z./minFG;
+                    mFG = mean(t.FG_factor.Z(:));
+                    t.FG_factor.Z = t.FG_factor.Z./mFG;
 
                     % *Compute threshold*
                     t.blockSize = obj.SurfaceComputation_BlockSize(dapi_idx);
                     t.Surface_Smoothing_Radius = NaN; % smoothing is not necessary for this surface since the median threshold value will be used as a global threshold.
                     t.Compute_Threshold(1);
-                    t.Surface_Smoothing_Radius = obj.Surface_Smoothing_Radius;
-                    t.FG_factor.Z = t.FG_factor.Z .* minFG;
 
-                    % Assume already the changes to the objects made by
-                    % this thresholding are small. - This might not be
-                    % valid
-                    %   % *Measure basic props*
-                    %   t.blockSize = obj.FeatureComputation_BlockSize;
-                    %   x = Measure_BasicProps(t);
-                    % 
-                    %   x(x(:,3) < minimumObjectSizeForCorrection,:) = [];
-                    %   x = double(x); % Need doubles for Compute_DAPI_Corrections
-                    % 
-                    %   % *Compute G1 intensity and area surfaces for normalization*
-                    %   [G1Dapi, ~, ~, G1Area] = Compute_DAPI_Corrections(t,x(:,1),x(:,2),x(:,4),x(:,3));
-                    % 
-                    %   % Set the Intensity_Normalizer of the nucleiPartitioner
-                    %   obj.nucleiPartitioner.Intensity_Normalizer = interpolator2d(G1Dapi.x, G1Dapi.y, G1Dapi.Z);
+                    t.User_Data.t1 = t.threshold;
+                    t.Surface_Smoothing_Radius = obj.Surface_Smoothing_Radius;
+                    
+                    % Compensate for the mFG factor
+                    t.FG_factor.Z = t.FG_factor.Z .* mFG;
+                    t.Threshold_Correction = generateCorrectionFunction(t);
+                    t.threshold.Z = t.threshold.Z / mFG;
+                    t.threshold_fun = interpolator2d(t.threshold.x,t.threshold.y,t.threshold.Z);
+
+                    % *Measure basic props*
+                    t.blockSize = obj.FeatureComputation_BlockSize;
+                    x = Measure_BasicProps(t);
+                    
+                    x(x(:,3) < minimumObjectSizeForCorrection,:) = [];
+                    x = double(x); % Need doubles for Compute_DAPI_Corrections
+                   
+                    % *Compute G1 intensity and area surfaces for normalization*
+                    [FG_f, FG_o, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(t,x(:,1),x(:,2),x(:,4),x(:,3));
+                    
+                    obj.DAPI_G1_Area = G1Area;
+                    obj.DAPI_G1band_Idx = G1_idx;
+                    obj.NumberObjectBeforePartitioning = size(x,1);
+                    
+                    t.FG_offset = FG_o;
+                    t.FG_factor = FG_f;
+                    t.FG_stripeX = Xstripe;
+                    
+                    % *Create Secondary_Correction function*
+                    % Background properties are not valid for secondary corrections
+                    BG_o = t.BG_offset;
+                    BG_s = t.BG_stripeX;
+                    t.BG_offset = [];
+                    t.BG_stripeX = [];
+                    t.Secondary_Correction = generateCorrectionFunction(t);
+                    t.BG_offset = BG_o;
+                    t.BG_stripeX = BG_s;
                 end
 
+                % Set the Area_Normalizer of the nucleiPartitioner
+                FG_o_fun = interpolator2d(FG_o.x, FG_o.y, FG_o.Z, false);
+                obj.nucleiPartitioner.Intensity_Normalizer = @(I,x,y) I + FG_o_fun(x,y);
+                
                 % Set the Area_Normalizer of the nucleiPartitioner
                 Area_fun = interpolator2d(G1Area.x, G1Area.y, G1Area.Z, false);
                 obj.nucleiPartitioner.Area_Normalizer = @(A,x,y) A ./ Area_fun(x,y);
             end
+
             % *Write object mask*
             t.blockSize = obj.FeatureComputation_BlockSize;
+
+%             error('some error')
             Write_Object_Mask(t, mask_path, obj.nucleiPartitioner);
 
             % *Create the TiffImg object for the object mask*
@@ -211,7 +233,7 @@ classdef CellExperiment < handle
             % Set Smoothing_Surface_Radius, Use_Parallel, and Verbose;
             % clear any backgrounds and foregrounds.
             setProperties(obj)
-            clearCorrections(obj)
+%             clearCorrections(obj)
 
             % Correct DAPI first to get the G1 indices
             % shorter name
@@ -484,9 +506,9 @@ classdef CellExperiment < handle
                                 case 'RadialIntensity'
                                     MuI_idx = startsWith(feature_names, "RadialIntensity_" + obj.Channel_Names(i) + "_Mean");
                                     features(:,MuI_idx) = features(:,MuI_idx) + MuI_offset(crctn).';
-                                case 'Granularity'
-                                    II_idx = startsWith(feature_names, "Granularity_" + obj.Channel_Names(i));
-                                    features(:,II_idx) = features(:,II_idx) + II_offset(crctn).';
+%                                 case 'Granularity'
+%                                     II_idx = startsWith(feature_names, "Granularity_" + obj.Channel_Names(i));
+%                                     features(:,II_idx) = features(:,II_idx) + II_offset(crctn).';
                                 otherwise
                                     % No other feature group needs to be
                                     % corrected
@@ -501,20 +523,20 @@ classdef CellExperiment < handle
                 % granular spectrum 1:L by the 0 element to normalize them.
                 % *This needs to happen after the intensity correction,
                 % which is why it must be done here.*
-                gran_idx = find(featNames == "Granularity");
-                names = {obj.featureExtractor.featureGroups.FeatureNames};
-                num_xi = cumsum([0,cellfun(@numel, names)]); % group bounds
-%                 ["is0 : " + string(sum(features==0,1)'), "isnan : " + string(sum(isnan(features),1)'), feature_names']
-                
-                for i = gran_idx
-                    start_idx = num_xi(i) + 1;
-                    end_idx = num_xi(i+1);
-                    
-                    features(:,start_idx+1:end_idx) = features(:,start_idx+1:end_idx) ./ features(:,start_idx);
-                end
-                toRemove = num_xi(gran_idx)+1;
-                features(:,toRemove) = [];
-                feature_names(toRemove) = [];
+%                 gran_idx = find(featNames == "Granularity");
+%                 names = {obj.featureExtractor.featureGroups.FeatureNames};
+%                 num_xi = cumsum([0,cellfun(@numel, names)]); % group bounds
+% %                 ["is0 : " + string(sum(features==0,1)'), "isnan : " + string(sum(isnan(features),1)'), feature_names']
+%                 
+%                 for i = gran_idx
+%                     start_idx = num_xi(i) + 1;
+%                     end_idx = num_xi(i+1);
+%                     
+%                     features(:,start_idx+1:end_idx) = features(:,start_idx+1:end_idx) ./ features(:,start_idx);
+%                 end
+%                 toRemove = num_xi(gran_idx)+1;
+%                 features(:,toRemove) = [];
+%                 feature_names(toRemove) = [];
                 
                 
                 % Save features
@@ -638,7 +660,7 @@ classdef CellExperiment < handle
 
                 bboxes = [LT, RB - LT + 1];
             else
-                bboxes = locations;
+                bboxes = location;
             end
 
             % Get tile indices for each bounding box
