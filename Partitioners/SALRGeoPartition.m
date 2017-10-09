@@ -90,18 +90,30 @@ classdef SALRGeoPartition < ObjectPartitioner
             
             % James Kapaldo
             
-            if nargin < 3
+            if nargin < 4
                 Image_Offset = [0 0];
             end
             
             % Pre-process the mask
-            [CC, attempt] = preProcess(I, BW, Image_Offset);
+            [CC, attempt] = preProcess(obj, I, BW, Image_Offset);
+            
+            % Pixel list of objects to attempt
+            CC_attempt = CC;
+            CC_attempt.PixelIdxList = CC_attempt.PixelIdxList(attempt);
+            CC_attempt.NumObjects = sum(attempt);
+            
+            
+            if CC_attempt.NumObjects
+                % Partition the objects
+                BW_partitioned = declumpNuclei(I, CC_attempt, obj.SALR_Options, obj.Part_Options);%, attempt);
+            else
+                BW_partitioned = false(size(BW));
+            end
 
-            % Partition the objects
-            BW_partitioned = declumpNuclei(I, CC, obj.SALR_Options, obj.Part_Options, attempt);
-
+            BW_partitioned(cat(1,CC.PixelIdxList{~attempt})) = true;
+            
             % Post-process the mask
-            BW_partitioned = postProcess(BW_partitioned);
+            BW_partitioned = postProcess(obj, BW_partitioned);
         end
 
         
