@@ -63,7 +63,7 @@ classdef TiffImg < matlab.mixin.Copyable
         numTiles
     end
 
-    properties (SetAccess = private, Hidden)
+    properties (SetAccess = private)%, Hidden)
         FileID
 
         maxSampleValue
@@ -77,11 +77,15 @@ classdef TiffImg < matlab.mixin.Copyable
         blck_y_inds
         blck_x_inds
 
-        threshold_fun = []
         Threshold_After_Correction(1,1) logical = false;
         Threshold_CorrectionsExpression;
+        
     end
-
+    properties (Hidden)
+        threshold_fun = []
+        Threshold_Correction = []
+        Secondary_Correction = []
+    end
     properties
         threshold = []
 
@@ -105,6 +109,9 @@ classdef TiffImg < matlab.mixin.Copyable
 
         Use_GPU(1,1) logical = false;
         Verbose(1,1) logical = false;
+    end
+    properties
+        User_Data
     end
 
     methods
