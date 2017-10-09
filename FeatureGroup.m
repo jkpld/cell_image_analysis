@@ -37,9 +37,9 @@ classdef (Abstract) FeatureGroup < matlab.mixin.Heterogeneous
                 end
             end
             
-            if numel(fd) > numel(obj.requiredOptions)
-                warning('FeatureGroup:extraOptions','Extra options given for FeatureGroup, %s. Extra options will be ignored.', obj.GroupName);
-            end
+%             if numel(fd) > numel(obj.requiredOptions)
+%                 warning('FeatureGroup:extraOptions','Extra options given for FeatureGroup, %s. Extra options will be ignored.', obj.GroupName);
+%             end
         end
     end
     
