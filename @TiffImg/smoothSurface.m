@@ -25,12 +25,14 @@ if nargin<5
     type = 'LowessBisquare';
 end
 
+span = max(min(1,pi*smoothRadius^2 / numel(z)),0);
+
 switch type
 
     case 'Lowess'
         
         Z = curvefit.LowessFit;
-        Z.Span = pi*smoothRadius^2 / numel(z);
+        Z.Span = span;
         Z = fit(Z, [Y(:),X(:)], z(:));
         Z = reshape(evaluate(Z, [Y(:),X(:)]),size(X));
         
@@ -38,7 +40,7 @@ switch type
         
         Z = curvefit.LowessFit;
         Z.Robust = 'LAR';
-        Z.Span = pi*smoothRadius^2 / numel(z);
+        Z.Span = span;
         Z = fit(Z, [Y(:),X(:)], z(:));
         Z = reshape(evaluate(Z, [Y(:),X(:)]),size(X));
         
@@ -46,7 +48,7 @@ switch type
         
         Z = curvefit.LowessFit;
         Z.Robust = 'Bisquare';
-        Z.Span = pi*smoothRadius^2 / numel(z);
+        Z.Span = span;
         Z = fit(Z, [Y(:),X(:)], z(:));
         Z = reshape(evaluate(Z, [Y(:),X(:)]),size(X));
         
@@ -65,7 +67,7 @@ switch type
     otherwise
         
         Z = curvefit.LowessFit;
-        Z.Span = pi*smoothRadius^2 / numel(z);
+        Z.Span = span;
         Z = fit(Z, [Y(:),X(:)], z(:));
         Z = reshape(evaluate(Z, [Y(:),X(:)]),size(X));
 
