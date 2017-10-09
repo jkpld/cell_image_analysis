@@ -86,7 +86,7 @@ seedPoints = cell(n,1);
 cuts = cell(n,1);
 
 % Create a progress monitor
-progres = displayProgress(n, 10, verbose, Use_Parallel);
+progres = displayProgress(n, 10, verbose, Use_Parallel, 'name', 'Partitioning objects, ');
 Que = progres.start();
 
 if Use_Parallel
