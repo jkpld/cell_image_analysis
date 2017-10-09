@@ -27,15 +27,8 @@ if isempty(tiffImg.threshold_fun) && ~Use_Mask
 end
 
 try
-    CorrectionFunction = generateCorrectionFunction(tiffImg);
-    ThresholdCorrection_isCurrent = isequal(tiffImg.Threshold_CorrectionsExpression, tiffImg.Current_Image_Correction_Expression);
-    
-    if tiffImg.Threshold_After_Correction && ~ThresholdCorrection_isCurrent
-        Threshold_Correction = generateFunctionFromExpression(tiffImg, tiffImg.Threshold_CorrectionsExpression, true);
-    end
-    
-    if tiffImg.Threshold_After_Correction && ~Use_Mask
-        threshold = median(tiffImg.threshold.Z(:));
+    if ~tiffImg.Threshold_After_Correction
+        CorrectionFunction = generateCorrectionFunction(tiffImg);
     end
     
     % Initialize features
@@ -75,18 +68,16 @@ try
                 Is = CorrectionFunction(Is,x,y);
             else
                 % Get threshold for block.
-                if ~tiffImg.Threshold_After_Correction
+%                 if ~tiffImg.Threshold_After_Correction
                     threshold = tiffImg.threshold_fun(x,y);
-                end
+%                 end
 
                 % Apply corrections if before threshold
                 if tiffImg.Threshold_After_Correction
-                    if ThresholdCorrection_isCurrent
-                        Is = CorrectionFunction(Is,x,y);
-                        BW = Is > threshold;
-                    else
-                        BW = Threshold_Correction(Is,x,y) > threshold;
-                        Is = CorrectionFunction(Is,x,y);
+                    Is = tiffImg.Threshold_Correction(Is,x,y);
+                    BW = Is > threshold;
+                    if ~isempty(tiffImg.Secondary_Correction)
+                        Is = tiffImg.Secondary_Correction(Is,x,y);
                     end
                 else
                     BW = Is > threshold;

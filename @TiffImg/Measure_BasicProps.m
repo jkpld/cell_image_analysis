@@ -31,16 +31,13 @@ if isempty(tiffImg.threshold_fun) && ~Use_Mask
 end
 
 try
-    CorrectionFunction = generateCorrectionFunction(tiffImg);
-    ThresholdCorrection_isCurrent = isequal(tiffImg.Threshold_CorrectionsExpression, tiffImg.Current_Image_Correction_Expression);
-    
-    if tiffImg.Threshold_After_Correction && ~ThresholdCorrection_isCurrent
-        Threshold_Correction = generateFunctionFromExpression(tiffImg, tiffImg.Threshold_CorrectionsExpression, true);
+    if ~tiffImg.Threshold_After_Correction
+        CorrectionFunction = generateCorrectionFunction(tiffImg);
     end
     
-    if tiffImg.Threshold_After_Correction && ~Use_Mask
-        threshold = median(tiffImg.threshold.Z(:));
-    end
+%     if tiffImg.Threshold_After_Correction && ~Use_Mask
+%         threshold = median(tiffImg.threshold.Z(:));
+%     end
     
     % Basic props measurer
     bp = BasicProps(channelName,struct('Use_GPU',tiffImg.Use_GPU));
@@ -73,6 +70,9 @@ try
             % Smooth image
             Is = imfilter(I, tiffImg.Image_Smooth_Kernel, 'symmetric'); clear I
             
+%             figure
+%             imshow(gather(Is),[])
+            
             if Use_Mask
                 BW = getBlock(object_mask, blck_x, blck_y);
 
@@ -84,25 +84,30 @@ try
                 Is = CorrectionFunction(Is,x,y);
             else
                 % Get threshold for block.
-                if ~tiffImg.Threshold_After_Correction
+%                 if ~tiffImg.Threshold_After_Correction
                     threshold = tiffImg.threshold_fun(x,y);
-                end
+%                 end
 
                 % Apply corrections if before threshold
                 if tiffImg.Threshold_After_Correction
-                    if ThresholdCorrection_isCurrent
-                        Is = CorrectionFunction(Is,x,y);
-                        BW = Is > threshold;
-                    else
-                        BW = Threshold_Correction(Is,x,y) > threshold;
-                        Is = CorrectionFunction(Is,x,y);
+                    Is = tiffImg.Threshold_Correction(Is,x,y);
+                    BW = Is > threshold;
+                    if ~isempty(tiffImg.Secondary_Correction)
+                        Is = tiffImg.Secondary_Correction(Is,x,y);
                     end
                 else
                     BW = Is > threshold;
                     Is = CorrectionFunction(Is,x,y);
                 end
+                
+                
             end
-            
+%             figure
+%             imshow(threshold,[])
+%             figure
+%             imshow(gather(BW))
+%             figure
+%             imshow(gather(Is),[])
             % Label matrix            
             BW = clear2dborder(BW);
             Ld = bwlabel(BW); clear BW

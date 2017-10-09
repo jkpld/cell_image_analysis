@@ -54,16 +54,18 @@ try
             [tifflib('getField',t_ID,Tiff.TagID.ImageDescription),'|imageMask']);
     
     
-    CorrectionFunction = generateCorrectionFunction(tiffImg);
-    ThresholdCorrection_isCurrent = isequal(tiffImg.Threshold_CorrectionsExpression, tiffImg.Current_Image_Correction_Expression);
-    
-    if tiffImg.Threshold_After_Correction && ~ThresholdCorrection_isCurrent
-        Threshold_Correction = generateFunctionFromExpression(tiffImg, tiffImg.Threshold_CorrectionsExpression, true);
+    if ~tiffImg.Threshold_After_Correction
+        CorrectionFunction = generateCorrectionFunction(tiffImg);
     end
     
-    if tiffImg.Threshold_After_Correction
-        threshold = median(tiffImg.threshold.Z(:));
-    end
+
+    
+%     if tiffImg.Threshold_After_Correction
+%         threshold = median(tiffImg.threshold.Z(:));
+%         threshold
+%         threshold = threshold*50
+%     end
+    
     
     % Only need to do corrections afterwards if the partitioner needs the
     % image
@@ -87,9 +89,9 @@ try
             [I,x,y] = getBlock(tiffImg,blck_x,blck_y);
             
             % Get threshold for block.
-            if ~tiffImg.Threshold_After_Correction
+%             if ~tiffImg.Threshold_After_Correction
                 threshold = tiffImg.threshold_fun(x,y);
-            end
+%             end
 
             if tiffImg.Use_GPU
                 I = gpuArray(I);
@@ -103,16 +105,15 @@ try
             % the background
             % Get threshold for block.
 
+%             figure
+%             imshow(gather(Is),[])
+            
             % Apply corrections if before threshold
             if tiffImg.Threshold_After_Correction
-                if ThresholdCorrection_isCurrent
-                    Is = CorrectionFunction(Is,x,y);
-                    BW = Is > threshold;
-                else
-                    BW = Threshold_Correction(Is,x,y) > threshold;
-                    if partitionerNeedsImage
-                        Is = CorrectionFunction(Is,x,y);
-                    end
+                Is = tiffImg.Threshold_Correction(Is,x,y);
+                BW = Is > threshold;
+                if ~isempty(tiffImg.Secondary_Correction) && partitionerNeedsImage
+                    Is = tiffImg.Secondary_Correction(Is,x,y);
                 end
             else
                 BW = Is > threshold;
@@ -120,6 +121,7 @@ try
                     Is = CorrectionFunction(Is,x,y);
                 end
             end
+            
             
             % Take arrays off gpu before passing to partitioner
             if tiffImg.Use_GPU
@@ -130,8 +132,18 @@ try
                 BWfull = BW; clear BW
             end
             
+%             figure
+%             imshow(BWfull)
+%             figure
+%             imshow(I,[])
+%             figure
+%             histogram(I)
+            
             % Partition objects
             BW_part = partitioner.partition(BWfull, I, [tiffImg.xEdges(blck_x),tiffImg.yEdges(blck_y)]);
+%             size(BW_part)
+%             figure
+%             imshow(BW_part)
             writeBlock(tiffImg, maskID, logical(BW_part), blck_x, blck_y);            
         end % y block
         
