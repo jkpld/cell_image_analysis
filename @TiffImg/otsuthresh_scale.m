@@ -24,6 +24,11 @@ if ~isempty(I)
     
     % Image class range
     a = getrangefromclass(I);
+    if a(2) == 1
+        minI = min(I(:));
+        maxI = max(I(:));
+        I = (I-minI)/(maxI-minI);
+    end
     
     % Convert all N-D arrays into a single column.  Convert to uint8 for
     % fastest histogram computation.
@@ -63,6 +68,11 @@ if ~isempty(I)
         level = (idx - 1) / (num_bins - 1);
         % Convert the threshold back into the original image range
         level = a(2) * level;
+        
+        if a(2) == 1
+            % Unscale threshold
+            level = level*(maxI-minI) + minI;
+        end
     else
         level = 0.0;
     end
