@@ -91,6 +91,8 @@ classdef (Abstract) ObjectPartitioner < matlab.mixin.Heterogeneous
                     end
                 end
 
+                tooSmall = A < obj.Minimum_Object_Size;
+                
                 % Offset centroids by the image offset.
                 mu = mu + Image_Offset;
                 
@@ -106,7 +108,12 @@ classdef (Abstract) ObjectPartitioner < matlab.mixin.Heterogeneous
                 attempt = attemptPartitioning(obj, A, iI);
             else                
                 attempt = true(CC.NumObjects,1);
+                tooSmall = cellfun(@numel,CC.PixelIdxList) < obj.Minimum_Object_Size;
             end
+            
+            attempt = attempt(~tooSmall);
+            CC.PixelIdxList = CC.PixelIdxList(~tooSmall);
+            CC.NumObjects = CC.NumObjects - sum(tooSmall);
         end
         
         function BW_part = postProcess(obj, BW)
