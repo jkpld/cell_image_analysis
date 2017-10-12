@@ -1,15 +1,16 @@
 classdef TiffImg < matlab.mixin.Copyable
 
-
+    properties
+        FileName(1,:) char
+    end
     properties (SetAccess = private)
-        FileName
-        Acquisition_Info
-        mmPerPixel
+        Acquisition_Info(1,1) struct
+        mmPerPixel(1,1) double
 
-        workingClass
-        imageClass
-        imageSize
-        stripeWidth
+        workingClass(1,:) char
+        imageClass(1,:) char
+        imageSize(1,2) double
+        stripeWidth(1,1) double
     end
 
     properties
@@ -63,7 +64,7 @@ classdef TiffImg < matlab.mixin.Copyable
         numTiles
     end
 
-    properties (SetAccess = private)%, Hidden)
+    properties (SetAccess = private, Hidden)
         FileID
 
         maxSampleValue
@@ -79,7 +80,6 @@ classdef TiffImg < matlab.mixin.Copyable
 
         Threshold_After_Correction(1,1) logical = false;
         Threshold_CorrectionsExpression;
-        
     end
     properties (Hidden)
         threshold_fun = []
@@ -111,7 +111,7 @@ classdef TiffImg < matlab.mixin.Copyable
         Verbose(1,1) logical = false;
     end
     properties
-        User_Data
+        UserData
     end
 
     methods
@@ -344,7 +344,7 @@ classdef TiffImg < matlab.mixin.Copyable
             end
         end
 
-        function I = getTile(obj, tile_idx)
+        function [I,x,y] = getTile(obj, tile_idx)
             % initialize array for image stripe
             I = zeros(obj.tileSize,obj.imageClass);
 
@@ -357,6 +357,12 @@ classdef TiffImg < matlab.mixin.Copyable
             if ~strcmp(obj.imageClass,'logical')
                 I = cast(I,obj.workingClass);
                 I = I / cast(obj.maxSampleValue,obj.workingClass);
+            end
+            
+            if nargout > 1
+                [j,k] = ind2sub(size(obj.tiles),tile_idx+1);
+                y = obj.tile_y_inds + (j-1)*obj.tileSize(1);
+                x = obj.tile_x_inds + (k-1)*obj.tileSize(2);
             end
         end
 
