@@ -50,7 +50,7 @@ else
     name = char(name);
 end
 
-DEBUG = 1;
+DEBUG = 0;
 
 
 % Remove the stripe artifact. --------------------------------------------
@@ -97,8 +97,8 @@ else
     else
         maxPeriod = 3*tiffImg.stripeWidth*tiffImg.mmPerPixel;
     end
-
     Xstripe1 = highpass(Xstripe1,maxPeriod,1/fsample) + 1;
+
     I_c = I ./ nakeinterp1(stripe_x, Xstripe1, x);
     
     xg = (1:tiffImg.imageSize(2)).';
@@ -150,11 +150,12 @@ options.defaultValue = nan;
 
 % Decimate data using the mean of the data in the 2-4% range
     function v = reductionMethod(x)
-        prct = prctile(x,[2,4]);
+        prct = prctile(x(x>0),[2,4]);
         idx = x>=prct(1) & x<=prct(2);
         
         v = mean(x(idx));
-%         [numel(idx), sum(idx), v]
+%         v = median(x(idx));
+%         [numel(idx), sum(idx), v, mean(x(idx)), median(x(idx))]
         if sum(idx) < 0.5*nucleiPerBin
             v = nan;
         end
@@ -179,11 +180,13 @@ flatteningSurface.y = yg;
 if DEBUG
     figure
     tri = delaunay(S.X,S.Y);
-    trisurf(tri,S.X,S.Y,S.Z);
+    ts = trisurf(tri,S.X,S.Y,S.Z);
     line(x,y,I_c,'Marker','.','MarkerSize',1,'LineStyle','none','Color','g')
-    surface(flatteningSurface.x,flatteningSurface.y,flatteningSurface.Z)
+%     surface(flatteningSurface.x,flatteningSurface.y,flatteningSurface.Z)
     title(['Channel staining correction (2-4% value, after stripe crrctn) : channel ' name])
     setTheme(gcf,'dark')
+    shading interp
+    ts.EdgeColor = 'k';
     axis tight
     zlim([0.9*min(S.Z(:)),1.1*max(S.Z(:))])
 
