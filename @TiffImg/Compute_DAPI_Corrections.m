@@ -46,7 +46,7 @@ else
     bin = options.binSize(1)*mmPP;
 end
 
-DEBUG = 1;
+DEBUG = 0;
 
 %% Initial correction. ----------------------------------------------------
 
@@ -142,7 +142,7 @@ idx = dapi_c > 1.8 & dapi_c < 2.8;
 % Get the bin size for use with the G2 band
 nucleiPerBin = 300; % emperical
 bin = sqrt( (2/sqrt(3)) * nucleiPerBin * imageArea / sum(idx) );
-fprintf('dapi bin size : %f\n', bin)
+% fprintf('dapi bin size : %f\n', bin)
 
 % Compute the histogram of the G2 band accross the entire image. The
 % maximum value should give the approximate location of the G2 band. Note,
