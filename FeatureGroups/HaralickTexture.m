@@ -77,7 +77,6 @@ classdef HaralickTexture < FeatureGroup
             
             
             NL = 8; % Use 8 levels.
-            
             L = single(L); % Make L the same class as I
             N_obj = max(L(:)); % Number of objects
             
@@ -96,7 +95,7 @@ classdef HaralickTexture < FeatureGroup
             
             % Compute the per object min and max to scale the intensity
             % levels
-            BG = L==0; % background mask
+            BG = L==0 | isnan(I); % background mask
             FG = ~BG; % forground mask
             Lf = L(FG); % forground labels
             If = I(FG); clear FG; % forground image
@@ -106,15 +105,14 @@ classdef HaralickTexture < FeatureGroup
             objRange = objMax - objMin; clear objMax;
             
             % Scale intensities of each object to be in the range [1,NL].
-            I = floor(NL*(I - objMin(L+1))./objRange(L+1) + 1); clear objMin objRange
-            
+            I = floor(NL*(I - objMin(L+1))./objRange(L+1) + 1); clear objMin %objRange
+            I(I>NL) = NL;
             L(BG) = NaN; clear BG; % Set all non object pixels to NaN
             
             % Pad the arrays for circular shifting
             maxD = max(D);
             I = padarray(I,[maxD,maxD], 0);
             L = padarray(L,[maxD,maxD], NaN);
-            
             
             % Compute the GLCM matrix and then the Harlick features for
             % each direction
@@ -130,10 +128,10 @@ classdef HaralickTexture < FeatureGroup
                 % Get the intensities and object number for the valid
                 % region
                 Inds = [I(valid), I2(valid), L(valid)];
-                
+
                 % Compute the GLCM for each object
                 GLCM = accumarray(Inds, 1, [NL, NL, N_obj]);
-                
+
                 % Make the GLCM symmetric
                 GLCM = GLCM + permute(GLCM,[2,1,3]);
                 
