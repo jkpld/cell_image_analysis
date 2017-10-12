@@ -15,6 +15,8 @@ function th = Compute_Threshold(tiffImg, applyCorrectionsFirst)
 %
 % Note : If tiffImg.Surface_Smoothing_Radius is non-NaN, then the threshold
 % will be smoothed with a Lowess smoothing surface.
+% Note : The threshold will always be median filtered using a [3,3] window
+% before smoothing, if any.
 
 % James Kapaldo
 
