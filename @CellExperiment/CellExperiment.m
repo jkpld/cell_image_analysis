@@ -6,8 +6,11 @@ classdef CellExperiment < handle
         Channel_Names(1,:) string
         Channel_TiffImgs(1,:) TiffImg
         Mask(1,1) TiffImg
-        
+    end
+    properties
         Feature_File(1,1) string
+    end
+    properties (SetAccess = private)
         Feature_Names(1,:) string
     end
     properties
@@ -19,10 +22,10 @@ classdef CellExperiment < handle
         FeatureComputation_BlockSize(1,1) double = 4096 % [pixels]
     end
     properties (Hidden)
-        Object_Centroid(:,2) single
         Object_Area(:,1) single
     end
     properties
+        Object_Centroid(:,2) single
         DAPI_G1_Area(1,1) struct
 %         DAPI_G1_Intensity(1,1) struct
         DAPI_G1band_Idx(:,1) double
@@ -679,8 +682,10 @@ classdef CellExperiment < handle
             for i = numel(channelIdx):-1:1
                 if isMask(channelIdx(i))
                     tiffImgs(i) = obj.Mask;
+                    tiffImgs_corr{i} = obj.Mask.generateCorrectionFunction(true);
                 else
                     tiffImgs(i) = obj.Channel_TiffImgs(channelIdx(i));
+                    tiffImgs_corr{i} = obj.Channel_TiffImgs(channelIdx(i)).generateCorrectionFunction(true);
                 end
             end
             
@@ -709,7 +714,8 @@ classdef CellExperiment < handle
                                 % in now. Initialize tile image
                                 tileImg = zeros([t.tileSize,N_ch],t.workingClass);
                                 for ch_num = 1:N_ch
-                                    tmp = tiffImgs(ch_num).getTile(tN); % Read in image tile
+                                    [tmp,x,y] = tiffImgs(ch_num).getTile(tN); % Read in image tile
+                                    tmp = tiffImgs_corr{ch_num}(tmp,x,y);
                                     tileImg(1:size(tmp,1),1:size(tmp,2),ch_num) = tmp; % Add to tileImg
                                 end
 
