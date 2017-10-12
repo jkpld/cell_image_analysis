@@ -233,7 +233,7 @@ classdef CellExperiment < handle
             % Set Smoothing_Surface_Radius, Use_Parallel, and Verbose;
             % clear any backgrounds and foregrounds.
             setProperties(obj)
-%             clearCorrections(obj)
+            clearCorrections(obj)
 
             % Correct DAPI first to get the G1 indices
             % shorter name
@@ -506,38 +506,13 @@ classdef CellExperiment < handle
                                 case 'RadialIntensity'
                                     MuI_idx = startsWith(feature_names, "RadialIntensity_" + obj.Channel_Names(i) + "_Mean");
                                     features(:,MuI_idx) = features(:,MuI_idx) + MuI_offset(crctn).';
-%                                 case 'Granularity'
-%                                     II_idx = startsWith(feature_names, "Granularity_" + obj.Channel_Names(i));
-%                                     features(:,II_idx) = features(:,II_idx) + II_offset(crctn).';
                                 otherwise
                                     % No other feature group needs to be
                                     % corrected
                             end
                         end
-                    end
-                    
-                    
+                    end 
                 end
-                
-                % Post-process Granularity features. We need to divide the
-                % granular spectrum 1:L by the 0 element to normalize them.
-                % *This needs to happen after the intensity correction,
-                % which is why it must be done here.*
-%                 gran_idx = find(featNames == "Granularity");
-%                 names = {obj.featureExtractor.featureGroups.FeatureNames};
-%                 num_xi = cumsum([0,cellfun(@numel, names)]); % group bounds
-% %                 ["is0 : " + string(sum(features==0,1)'), "isnan : " + string(sum(isnan(features),1)'), feature_names']
-%                 
-%                 for i = gran_idx
-%                     start_idx = num_xi(i) + 1;
-%                     end_idx = num_xi(i+1);
-%                     
-%                     features(:,start_idx+1:end_idx) = features(:,start_idx+1:end_idx) ./ features(:,start_idx);
-%                 end
-%                 toRemove = num_xi(gran_idx)+1;
-%                 features(:,toRemove) = [];
-%                 feature_names(toRemove) = [];
-                
                 
                 % Save features
                 save(saveToFileName,'features','feature_names')
@@ -545,6 +520,8 @@ classdef CellExperiment < handle
                 obj.Feature_File = string(saveToFileName);
                 
             catch ME
+                
+                
                 for i = 1:N_ch, obj.Channel_TiffImgs(i).close(); end
                 obj.Mask.close();
                 if obj.Use_GPU
@@ -837,7 +814,7 @@ classdef CellExperiment < handle
             
             d = X(:,Xn=="Intensity_DAPI_Integrated");
             mpp = obj.Channel_TiffImgs(1).mmPerPixel;
-            inRange = a<6 & d<8;% & (X(:,1)*mpp>4 & X(:,1)*mpp<14) & (X(:,2)*mpp>4 & X(:,2)*mpp<14);
+            inRange = a<6 & d<8 & d>0;% & (X(:,1)*mpp>4 & X(:,1)*mpp<14) & (X(:,2)*mpp>4 & X(:,2)*mpp<14);
 
 %             figure
 %             [~,tp,tx] = kde(d(inRange),2^8,0,3);
