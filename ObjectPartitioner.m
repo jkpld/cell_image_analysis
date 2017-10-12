@@ -24,6 +24,12 @@ classdef (Abstract) ObjectPartitioner < matlab.mixin.Heterogeneous
         Minimum_Object_Size(1,1) double = 150;
         Minimum_Hole_Size(1,1) double = 10;
         Use_Parallel(1,1) logical = false;
+        
+        % Acceptance_Contour : Nx2 array descripting a contour in the
+        % normalized DAPI-Area plane. Objects inside the contour will
+        % attempt to be partitioned. Objects outside of the contour will be
+        % ignored.
+        Acceptance_Contour = [3, 1.1; 10, 4; 10 7; 5 7; 2 3; 1.6 2.5; 1.6 1.1; 3 1.1];
     end
     
     methods (Abstract)
@@ -31,19 +37,15 @@ classdef (Abstract) ObjectPartitioner < matlab.mixin.Heterogeneous
     end
     
     methods
-        function tf = attemptPartitioning(~, A, I)
+        function tf = attemptPartitioning(obj, A, I)
             % ATTEMPTPARTITIONING Return true if the objects' normalized
-            % area and intensity are greater than 1.1 and 1.6,
-            % respectively.
+            % area and intensity are inside the Acceptance_Contour
             %
             % This function is only valid when the nuclei data is
             % normalized such that the G1 nuclei have an area of 1 and an
             % intensity of 1.
             
-            acceptanceContour = [3, 1; 10, 5; 10 7; 8 7; 2 3; 1 2; 0 2; 0 0; 3 0; 3 1];
-            
-            tf = (A > 1.1) & (I > 1.6) & ...
-                inpolygon(I,A,acceptanceContour(:,1),acceptanceContour(:,2));
+            tf = inpolygon(I,A,obj.Acceptance_Contour(:,1),obj.Acceptance_Contour(:,2));
         end
         
         function [CC, attempt] = preProcess(obj, I, BW, Image_Offset)
