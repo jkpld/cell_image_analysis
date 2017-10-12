@@ -61,12 +61,12 @@ if isrow(z)
     z = z(:);
 end
 
-tmp = rand(1);
+% tmp = rand(1);
 
 % Get input values
 p = inputParser;
 p.FunctionName = 'bg_fitOpticalDistortion';
-addParameter(p,'initialBinSize',tmp,@(t) numel(t) == 1 && t > 0 && t < max(x)-min(x));
+addParameter(p,'initialBinSize',0.005,@(t) numel(t) == 1 && t > 0 && t < max(x)-min(x));
 addParameter(p,'z_bounds',[0.65, 1.5],@(t) numel(t) == 2  && t(1) < t(2)); %&& all(t > 0 & t < max(z)-min(z))
 addParameter(p,'threshold',1e-4,@(t) numel(t) == 1 && t > 0);
 addParameter(p,'generatePlots',false,@(t) islogical(t) || (t==0 || t == 1) );
@@ -83,16 +83,16 @@ T = p.Results.approximatePeriod;
 boundEdges = prctile(x,[0,100]);
 
 
-if isequal(voxelSizes,tmp)
-    ppb = 100; % points per bin
-    rho = numel(x)/diff(boundEdges); % point density
-    voxelSizes = ppb/rho; % default bin size
-%     voxelSizes = 0.04739;
-end
+% if isequal(voxelSizes,tmp)
+%     ppb = 100; % points per bin
+%     rho = numel(x)/diff(boundEdges); % point density
+%     voxelSizes = ppb/rho; % default bin size
+% %     voxelSizes = 0.04739;
+% end
+% 
+% voxelSizes = 0.005;
 
-voxelSizes = 0.005;
-
-voxelSizes*numel(x)/diff(boundEdges)
+%voxelSizes*numel(x)/diff(boundEdges)
 
 xEdges = (boundEdges(1)-voxelSizes(1)) : voxelSizes(1)  : (boundEdges(2) + voxelSizes(1));
 
@@ -171,7 +171,7 @@ sig = c-medfilt1(c,31,'truncate');
 
 % Normalize
 sig = sig/mad(sig,1);
-
+sig(1:5) = 0;
 % Compute new samply frequency
 fsample = 4*freq(find(sig>10 & sig == imdilate(sig,ones(31,1)),1,'last')+1);
 
