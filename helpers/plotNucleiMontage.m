@@ -19,6 +19,11 @@ if nargin < 5
     contrastControl = [];
 end
 
+imgMin = min(min(images,[],1),[],2);
+imgMax = max(max(images,[],1),[],2);
+
+images = images - imgMin;
+images = images./(imgMax-imgMin);
 
 [Y,X,C,K] = size(images);
 images = reshape(permute(images,[1,2,4,3]),[Y,X*K,C]);
@@ -57,7 +62,7 @@ for i = 1:C
     ax(i).XLim = 0.5 + [0, K*size(images,1)];
     ax(i).XLim = 0.5 + [0, size(images,1)];
 
-    lims{i} = [round(prctile(I(:),90:1:100)),single(intmax('uint16'))];
+    lims{i} = [round(prctile(I(:),80:2:100)),single(intmax('uint16'))];
     brightnessLevels(i) = numel(lims{i})-2;
     
     image(I,'Parent',ax(i),'HitTest','off')
