@@ -175,11 +175,21 @@ classdef RadialIntensity < FeatureGroup
                 
             % Compute the square difference between the intensity and mean
             % intensity
-            Var_i = (vals - Mu(inds(:,1) + (inds(:,2)-1)*N_obj)).^2; clear vals
+            try
+                Var_i = (vals - reshape(Mu(inds(:,1) + (inds(:,2)-1)*N_obj),N_D,1)).^2;% clear vals
+            
 
-            % Compute the variance in each ring for each object
-            Var = accumarray(inds, Var_i, [N_obj, N_R], @sum); clear Var_i inds
+                % Compute the variance in each ring for each object
+                Var = accumarray(inds, Var_i, [N_obj, N_R], @sum);% clear Var_i inds
 
+            catch ME
+                size(inds)
+                size(vals)
+                size(S)
+                size(Mu)
+                size(Var_i)
+                rethrow(ME)
+            end
             % Compute the standard deviation
             Sigma = sqrt(Var./(N-1)); clear Var
 

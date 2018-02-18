@@ -1,6 +1,7 @@
 classdef CellExperiment < handle
     properties
         Experiment_Description(1,1) string
+        Experiment_Info(1,1) struct
     end
     properties (SetAccess = private)
         Channel_Names(1,:) string
@@ -382,12 +383,12 @@ classdef CellExperiment < handle
 
 
                 % iterate over x blocks
-                for blck_x = 1:numBlcks(2)
+                for blck_x = numBlcks(2):-1:1
 
                     for i = 1:N_ch, obj.Channel_TiffImgs(i).open(); end
                     obj.Mask.open();
 
-                    for blck_y = 1:numBlcks(1)
+                    for blck_y = numBlcks(1):-1:1
 
                         % Get image channels for current block
                         for i = N_ch:-1:1
