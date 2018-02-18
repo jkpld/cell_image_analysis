@@ -30,6 +30,7 @@ classdef CellExperiment < handle
         DAPI_G1_Area(1,1) struct
 %         DAPI_G1_Intensity(1,1) struct
         DAPI_G1band_Idx(:,1) double
+        CellPhaseClassification(1,1) struct
     end
     properties
         Use_GPU(1,1) logical = true
@@ -75,7 +76,7 @@ classdef CellExperiment < handle
                     end
                     prevTileSize = tileSize;
                     prevImageSize = imageSize;
-                    
+
                     % Set default blockSize
                     if isnan(obj.Channel_TiffImgs(i).stripeWidth)
                         obj.SurfaceComputation_BlockSize(i) = round(1024/max(tileSize))*max(tileSize);
@@ -83,8 +84,8 @@ classdef CellExperiment < handle
                         obj.SurfaceComputation_BlockSize(i) = round(obj.Channel_TiffImgs(i).stripeWidth/max(tileSize))*max(tileSize);
                     end
                 end
-                
-                
+
+
             end
         end
 
@@ -111,7 +112,7 @@ classdef CellExperiment < handle
             t = copy(t_ch);
             obj.TiffImg_for_Generating_Mask = t; % Save for later reference
             t.clearCorrections();
-        
+
             % Set some properties
             t.Surface_Smoothing_Radius = obj.Surface_Smoothing_Radius;
             t.Use_GPU = obj.Use_GPU;
@@ -167,7 +168,7 @@ classdef CellExperiment < handle
 
                     t.User_Data.t1 = t.threshold;
                     t.Surface_Smoothing_Radius = obj.Surface_Smoothing_Radius;
-                    
+
                     % Compensate for the mFG factor
                     t.FG_factor.Z = t.FG_factor.Z .* mFG;
                     t.Threshold_Correction = generateCorrectionFunction(t);
@@ -177,21 +178,21 @@ classdef CellExperiment < handle
                     % *Measure basic props*
                     t.blockSize = obj.FeatureComputation_BlockSize;
                     x = Measure_BasicProps(t);
-                    
+
                     x(x(:,3) < minimumObjectSizeForCorrection,:) = [];
                     x = double(x); % Need doubles for Compute_DAPI_Corrections
-                   
+
                     % *Compute G1 intensity and area surfaces for normalization*
                     [FG_f, FG_o, Xstripe, G1Area, G1_idx] = Compute_DAPI_Corrections(t,x(:,1),x(:,2),x(:,4),x(:,3));
-                    
+
                     obj.DAPI_G1_Area = G1Area;
                     obj.DAPI_G1band_Idx = G1_idx;
                     obj.NumberObjectBeforePartitioning = size(x,1);
-                    
+
                     t.FG_offset = FG_o;
                     t.FG_factor = FG_f;
                     t.FG_stripeX = Xstripe;
-                    
+
                     % *Create Secondary_Correction function*
                     % Background properties are not valid for secondary corrections
                     BG_o = t.BG_offset;
@@ -206,7 +207,7 @@ classdef CellExperiment < handle
                 % Set the Area_Normalizer of the nucleiPartitioner
                 FG_o_fun = interpolator2d(FG_o.x, FG_o.y, FG_o.Z, false);
                 obj.nucleiPartitioner.Intensity_Normalizer = @(I,x,y) I + FG_o_fun(x,y);
-                
+
                 % Set the Area_Normalizer of the nucleiPartitioner
                 Area_fun = interpolator2d(G1Area.x, G1Area.y, G1Area.Z, false);
                 obj.nucleiPartitioner.Area_Normalizer = @(A,x,y) A ./ Area_fun(x,y);
@@ -233,7 +234,7 @@ classdef CellExperiment < handle
             if ~DEBUG && nargout > 0
                 error('Correct_Image_Background:tooManyOuputs','Too many ouput arguments. Ouput is only supported if DEBUG is true.')
             end
-            
+
             % Set Smoothing_Surface_Radius, Use_Parallel, and Verbose;
             % clear any backgrounds and foregrounds.
             setProperties(obj)
@@ -254,7 +255,7 @@ classdef CellExperiment < handle
             obj.Object_Centroid = x(:,1:2);
             obj.Object_Area = x(:,3);
             x = double(x);
-            
+
             if DEBUG && nargout > 0
                 varargout{1} = struct('basicProps',x,'name','DAPI');
             end
@@ -264,7 +265,7 @@ classdef CellExperiment < handle
 
             obj.DAPI_G1_Area = G1Area;
             obj.DAPI_G1band_Idx = G1_idx;
-            
+
             t.FG_offset = FG_o;
             t.FG_factor = FG_f;
             t.FG_stripeX = Xstripe;
@@ -289,7 +290,7 @@ classdef CellExperiment < handle
                 t.blockSize = obj.FeatureComputation_BlockSize;
                 I = Measure_Intensity(t,obj.Use_Parallel,'Object_Mask',obj.Mask);
                 I = double(I);
-                
+
                 if DEBUG && nargout > counter-1
                     varargout{counter} = struct('intensity',I,'name',name); %#ok<AGROW>
                     counter = counter + 1;
@@ -314,7 +315,7 @@ classdef CellExperiment < handle
                     all(isempty(obj.featureExtractor.featureGroups))
                 error('Compute_Object_Features:noFeatureGroups','No FeatureGroups have been added to the FeatureExtractor.');
             end
-            
+
             if exist(saveToFileName,'file')
                 if nargin < 3 || ~overWrite
                     buttonName = questdlg('The file specified already exists. Do you want to overide the file?','File already exists','No');
@@ -323,13 +324,13 @@ classdef CellExperiment < handle
                     end
                 end
             end
-                
+
             % Set extractor channel names
             obj.featureExtractor.channels = obj.Channel_Names;
 
             % Number of channels
             N_ch = numel(obj.Channel_TiffImgs);
-            
+
             % Set block sizes, get correction functions
             CorrectionFunction = cell(1,N_ch);
             postProcIntegratedInt_Offset = cell(1,N_ch);
@@ -341,22 +342,22 @@ classdef CellExperiment < handle
 
                 CorrectionFunction{i} = generateCorrectionFunction(t);
                 postProcIntegratedInt_Offset{i} = generateFunction(t,t.ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression,false,false);
-                
+
                 require_IntOffset = require_IntOffset || ...
                     ~isempty(postProcIntegratedInt_Offset{i});
             end
-            
+
             % Check to see that we have the required information : we need
             % to have the object areas and centroids. These can be those
             % that were computed in Correct_Image_Backgrounds, or they can
             % be from a Location and Shape feature group that we will
             % extract.
             featNames = [obj.featureExtractor.featureGroups.GroupName];
-            
+
             if require_IntOffset
                 hasRequired = ~isempty(obj.Object_Area) && ~isempty(obj.Object_Centroid);
                 computingRequired = all(ismember(["Location","Shape"], featNames)) || ismember("BasicProps", featNames);
-                
+
                 if  ~computingRequired && ~hasRequired
                     % Error
                     % Add a BasicProps group to the front of the featureGroups
@@ -365,7 +366,7 @@ classdef CellExperiment < handle
                         obj.featureExtractor.featureGroups];
                 end
             end
-                
+
             try
 
                 % Initialize the feature sizes
@@ -407,7 +408,7 @@ classdef CellExperiment < handle
                         if obj.Use_GPU, I = gpuArray(I); end
                         Is = imfilter(I, obj.Channel_TiffImgs(1).Image_Smooth_Kernel,'symmetric'); clear I;
                         if obj.Use_GPU, I = gather(Is); clear Is; end
-                        
+
                         % Extract object features from curret block
                         x_i = obj.featureExtractor.Compute(BW,I, [t.xEdges(blck_x),t.yEdges(blck_y)]);
 
@@ -428,7 +429,7 @@ classdef CellExperiment < handle
 
                 % Remove extra allocated features
                 features(object_count:end,:) = [];
-                
+
                 % Post-process object intensities
                 if require_IntOffset
                     % If an image channel has an
@@ -461,11 +462,11 @@ classdef CellExperiment < handle
                         areas = features(:, feature_names == "Basic_Props_Area");
                         obj.Object_Centroid = centroids;
                         obj.Object_Area = areas;
-                        
+
                         features(:,1:4) = [];
                         feature_names(1:4) = [];
                     end
-                    
+
                     % All feature group channels and feature group names
                     featChannels = [obj.featureExtractor.featureGroups.Channel];
 
@@ -515,17 +516,17 @@ classdef CellExperiment < handle
                                     % corrected
                             end
                         end
-                    end 
+                    end
                 end
-                
+
                 % Save features
                 save(saveToFileName,'features','feature_names')
                 obj.Feature_Names = feature_names;
                 obj.Feature_File = string(saveToFileName);
-                
+
             catch ME
-                
-                
+
+
                 for i = 1:N_ch, obj.Channel_TiffImgs(i).close(); end
                 obj.Mask.close();
                 if obj.Use_GPU
@@ -545,7 +546,7 @@ classdef CellExperiment < handle
             % Input
             %   locations : Either a N x 4 array giving the bounding boxes
             %     of the N objects to extract, or an N x 2 array giving the
-            %     centroids of the N objects to extract. 
+            %     centroids of the N objects to extract.
             %   channels : The names of the channels from which to extract
             %     images.
             %   patchSize : The size of the image to extract (1x2 array),
@@ -578,7 +579,7 @@ classdef CellExperiment < handle
             if nargin < 5
                 resizeObject = false;
             end
-            
+
             szL = size(location);
             if ~any(validChannel)
                 error('Extract_Object_Images:unknownChannel','The channel names given do not match and of the CellExperiment''s Channel_Names.')
@@ -592,16 +593,16 @@ classdef CellExperiment < handle
             if (resizeObject ~= 0) && (resizeObject ~= 1)
                 error('Extract_Object_Images:badInput','resizeObject must be logical.');
             end
-            
+
             if (szL(2) ~= 2 && szL(2) ~= 4) || numel(szL) ~= 2
                 error('Extract_Object_Images:badInput','The location input must either be an Nx2 array giving the object centroids or an Nx4 array giving the object bounding boxes.')
             end
-            
+
             if szL(2) == 2
-                
+
                 % Round centroids to nearest integer
                 location = round(location);
-                
+
                 if strcmp(patchSize,'objectSize')
                     error('Extract_Object_Images:badInput','Specifying ''objectSize'' requires that the location input are the bounding boxes (n x 4).')
                 end
@@ -614,7 +615,7 @@ classdef CellExperiment < handle
                     error('Extract_Object_Images:badInput','The object centroids provided are not valid because they go outside of the image bounds.');
                 end
             end
-            
+
             if szL(2) == 4 && (any(any(location(:,1:2)<1)) || ...
                     any(any(location(:,1:2)+location(:,3:4)>flip(t.imageSize))))
                 error('Extract_Object_Images:badInput','The bounding boxes provided are not valid because they go outside of the image bounds.');
@@ -689,7 +690,7 @@ classdef CellExperiment < handle
                     tiffImgs_corr{i} = obj.Channel_TiffImgs(channelIdx(i)).generateCorrectionFunction(true);
                 end
             end
-            
+
             for i = 1:N_ch, tiffImgs(i).open(); end % Open all images
 
             tmp_y_tileIdx = 1:t.tileSize(1); % create helper array
@@ -778,12 +779,12 @@ classdef CellExperiment < handle
             end
             for i = 1:N_ch, tiffImgs(i).close(); end % Open all images
         end
-        
+
         function [features, feature_names] = Load_Features(obj)
             if isempty(obj.Feature_File)
                 error('Load_Features:noFeatureFile','Cannot load features because there is no Feature_File.')
             end
-            
+
             dat = load(obj.Feature_File);
             features = dat.features;
             feature_names = dat.feature_names;
@@ -791,15 +792,15 @@ classdef CellExperiment < handle
                 warning('Load_Features:FeatureNameMismatch','The names of the features loaded do not match the feature names saved with the object. Features could be in a different order or the features could wrong.')
             end
         end
-        
+
         function summary = Create_Summary(obj)
             if obj.Feature_File == ""
                 error('Create_Summary:missingFeatures','The features must be computed before a summary is made.')
             end
-            
-            
+
+
             [X,Xn] = Load_Features(obj);
-            
+
             % Data summary -----------------------------------------------
             minX = min(X)';
             meanX = mean(X)';
@@ -812,13 +813,13 @@ classdef CellExperiment < handle
 
             summary = table(minX,meanX,maxX,stdX,madX,medianX,is0,isNan);
             summary.Properties.RowNames = cellstr(Xn);
-            
+
             % Plot DAPI vs Area ------------------------------------------
-            
+
             % Flatten Area
             a_flattener = interpolator2d(obj.DAPI_G1_Area.x,obj.DAPI_G1_Area.y,obj.DAPI_G1_Area.Z,false);
             a = X(:,Xn=="Shape_Area") ./ a_flattener(X(:,1),X(:,2));
-            
+
             d = X(:,Xn=="Intensity_DAPI_Integrated");
             mpp = obj.Channel_TiffImgs(1).mmPerPixel;
             inRange = a<6 & d<8 & d>0;% & (X(:,1)*mpp>4 & X(:,1)*mpp<14) & (X(:,2)*mpp>4 & X(:,2)*mpp<14);
@@ -826,7 +827,7 @@ classdef CellExperiment < handle
 %             figure
 %             [~,tp,tx] = kde(d(inRange),2^8,0,3);
 %             histogram(d(inRange),'BinLimits',[0,3])
-%             
+%
 %             figure
 %             hold on
 %             [~,tp,tx] = kde(d(inRange),2^5,0,3);
@@ -837,7 +838,7 @@ classdef CellExperiment < handle
 %             plot(tx,tp)
 %             [~,tp,tx] = kde(d(inRange),2^8,0,3);
 %             plot(tx,tp)
-%             
+%
 %             figure
 %             hold on
 %             [~,tp,tx] = kde(d,2^5,0,3);
@@ -848,7 +849,7 @@ classdef CellExperiment < handle
 %             plot(tx,tp)
 %             [~,tp,tx] = kde(d,2^8,0,3);
 %             plot(tx,tp)
-            
+
             % Decimate
             options = [];
             options.gridType = 'hexagonal';
@@ -856,7 +857,7 @@ classdef CellExperiment < handle
             options.reductionMethod = 'density';
             options.binSize = [0.025,1];
             da_dcmt = decimateData(d(inRange),a(inRange),[],options);
-            
+
             % Plot the dapi vs area density
             plotOptions.colorData = da_dcmt.Z;
             plotOptions.sizeData = 'sameAsColor';
@@ -872,7 +873,7 @@ classdef CellExperiment < handle
             colorbar;
             drawnow;
             setTheme(gcf,'dark')
-            
+
             % Plot DAPI --------------------------------------------------
             figure
             line(X(:,1)*obj.Channel_TiffImgs(1).mmPerPixel,X(:,2)*obj.Channel_TiffImgs(1).mmPerPixel,d,'marker','.','markersize',1,'linestyle','none','color','g');
@@ -883,7 +884,7 @@ classdef CellExperiment < handle
             zlim([0,3])
             view(30,10)
             setTheme(gcf,'dark')
-            
+
             % Plot GFP ---------------------------------------------------
             gfp = X(:,contains(Xn,'Intensity_GFP_Integrated'));
             figure
@@ -895,9 +896,9 @@ classdef CellExperiment < handle
             zlim(prctile(gfp,[0.1 99]))
             view(30,10)
             setTheme(gcf,'dark')
-            
+
         end
-        
+
     end
 
     methods %(Access = private)
