@@ -41,6 +41,10 @@ classdef (Abstract) FeatureGroup < matlab.mixin.Heterogeneous
 %                 warning('FeatureGroup:extraOptions','Extra options given for FeatureGroup, %s. Extra options will be ignored.', obj.GroupName);
 %             end
         end
+        
+%         function reload(obj,S)
+%             obj.Channel = S
+%         end
     end
     
     methods (Static, Sealed, Access = protected)
@@ -56,5 +60,28 @@ classdef (Abstract) FeatureGroup < matlab.mixin.Heterogeneous
                 tf(i) = isa(obj(i),'EmptyFeature');
             end
         end
+        
+        function S = saveobj(obj)
+%             warning('off','MATLAB:structOnObject');
+%             S = struct(obj);
+            S.Channel = obj.Channel;
+            S.GroupName = obj.GroupName;
+            S.Options = obj.Options;
+            S.requiredOptions = obj.requiredOptions;
+%             warning('on','MATLAB:structOnObject');
+        end
     end
+    
+    methods (Static)
+        function obj = loadobj(S)
+            if isstruct(S)
+                obj = eval(S.GroupName);
+                obj.Channel = S.Channel;
+                obj.Options = S.Options;
+                obj.requiredOptions = S.requiredOptions;
+            end
+        end
+    end
+    
+    
 end
