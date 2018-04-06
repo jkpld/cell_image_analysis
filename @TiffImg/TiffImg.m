@@ -213,6 +213,7 @@ classdef TiffImg < matlab.mixin.Copyable
             numTiles = flip(numTiles);
             obj.numTiles = numTiles;
 
+            
             if ~isfield(info,'StripeWidth') || ~isfinite(info.StripeWidth)
                 str = ['The image description does not have a StripeWidth ',...
                     'field giving the width, in pixels, of each line scan ',...
@@ -249,8 +250,14 @@ classdef TiffImg < matlab.mixin.Copyable
             obj.tilesPerBlck = blockSize./obj.tileSize;
             obj.numBlcks = ceil(obj.imageSize/blockSize);
 
-            obj.xEdges = [0:floor(obj.imageSize(2)/blockSize), obj.imageSize(2)/blockSize]*blockSize;
-            obj.yEdges = [0:floor(obj.imageSize(1)/blockSize), obj.imageSize(1)/blockSize]*blockSize;
+            if numel(blockSize)==2
+                obj.xEdges = [0:floor(obj.imageSize(2)/blockSize(2)), obj.imageSize(2)/blockSize(2)]*blockSize(2);
+                obj.yEdges = [0:floor(obj.imageSize(1)/blockSize(1)), obj.imageSize(1)/blockSize(1)]*blockSize(1);
+            else
+                obj.xEdges = [0:floor(obj.imageSize(2)/blockSize), obj.imageSize(2)/blockSize]*blockSize;
+                obj.yEdges = [0:floor(obj.imageSize(1)/blockSize), obj.imageSize(1)/blockSize]*blockSize;
+            end
+            
 
             obj.xCenters = obj.xEdges(1:end-1) + diff(obj.xEdges)/2;
             obj.yCenters = obj.yEdges(1:end-1) + diff(obj.yEdges)/2;
