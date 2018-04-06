@@ -79,7 +79,10 @@ classdef (Abstract) FeatureGroup < matlab.mixin.Heterogeneous
                 obj.Channel = S.Channel;
                 obj.Options = S.Options;
                 obj.requiredOptions = S.requiredOptions;
+            else
+                obj = S;
             end
+            
         end
     end
     
