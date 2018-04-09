@@ -55,11 +55,11 @@ th = t.Compute_Threshold()
 ```Matlab
 bg = t.Compute_Background();
 ```
-    - Background is determined by
-        1. Creating a mask with all pixels less than the threshold
-        2. Eroding this mask with a small diamond (radius 2)
-        3. Computing the median image intensity of all mask pixels from each block of the image.
-    - Background is stored in `t.BG_offset`
+  - Background is determined by
+      1. Creating a mask with all pixels less than the threshold
+      2. Eroding this mask with a small diamond (radius 2)
+      3. Computing the median image intensity of all mask pixels from each block of the image.
+  - Background is stored in `t.BG_offset`
 
 
 * `Compute_Foreground` - Compute image foreground
