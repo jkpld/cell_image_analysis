@@ -17,13 +17,9 @@ See the class definition for a list of all properties. Here a truncated list of 
   - `FG_f` : A foreground factor (`FG_factor`) that is multiplied or divided
   - `FG_s` : A foreground x stripe (`FG_stripeX`) that is multiplied or divided
 
- If `BG_offset` or `FG_offset` have not been assigned to the
- `TiffImg` yet, but they show up in the expression, they are
- replaced with 0's.
+  If `BG_offset` or `FG_offset` have not been assigned to the `TiffImg` yet, but they show up in the expression, they are replaced with 0's.
 
- If `BG_factor`, `FG_factor`, `BG_stripeX`, or `FG_stripeX` have not
- been assigned to the `TiffImg` yet, but they show up in the
- expression, they are replaced with 1's.
+  If `BG_factor`, `FG_factor`, `BG_stripeX`, or `FG_stripeX` have not been assigned to the `TiffImg` yet, but they show up in the expression, they are replaced with 1's.
 
   Example expression:
         (S - BG_o * BG_s + FG_o) / (FG_s * FG_f)
