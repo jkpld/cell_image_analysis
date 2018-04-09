@@ -70,7 +70,7 @@ bg = t.Compute_Background();
     1. Creating a mask with all pixels greater than the threshold
     2. Eroding this mask with a small diamond (radius 2)
     3. Computing the median image intensity of all mask pixels from each block of the image.
-  - Foreground is stored in `t.FG_factor`
+   - Foreground is stored in `t.FG_factor`
 
 
   * `Compute_StripeArtifact` - Compute stripe artifact in image background or foreground. When using the Aperio slide reader, there is often a strip artifact that can be seen along the slow scan axis.
