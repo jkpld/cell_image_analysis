@@ -38,123 +38,123 @@ See the class definition for a list of all properties. Here a truncated list of 
 
 ## List of high level methods
 * `TiffImg` - Create object instance
-```Matlab
-t = TiffImg('path-to-img.tiff');
-```
+  ```Matlab
+  t = TiffImg('path-to-img.tiff');
+  ```
 
 * `Compute_Threshold` - Compute image threshold
-```Matlab
-th = t.Compute_Threshold()
-```
+  ```Matlab
+  th = t.Compute_Threshold()
+  ```
     - Threshold is computed in each image block using adaptive log-weighted Otsu thresholding
     - Threshold is stored in `t.threshold`.
     - When the threshold is applied it is linearly interpolated to get the threshold value at each pixel of the image.
 
 
 * `Compute_Background` - Compute image background
-```Matlab
-bg = t.Compute_Background();
-```
-    - Background is determined by
-        1. Creating a mask with all pixels less than the threshold
-        2. Eroding this mask with a small diamond (radius 2)
-        3. Computing the median image intensity of all mask pixels from each block of the image.
-    - Background is stored in `t.BG_offset`
+  ```Matlab
+  bg = t.Compute_Background();
+  ```
+  - Background is determined by
+    1. Creating a mask with all pixels less than the threshold
+    2. Eroding this mask with a small diamond (radius 2)
+    3. Computing the median image intensity of all mask pixels from each block of the image.
+  - Background is stored in `t.BG_offset`
 
 
 * `Compute_Foreground` - Compute image foreground
-```Matlab
-fg = t.Compute_Foreground();
-```
-    - Foreground is determined by
-        1. Creating a mask with all pixels greater than the threshold
-        2. Eroding this mask with a small diamond (radius 2)
-        3. Computing the median image intensity of all mask pixels from each block of the image.
-    - Foreground is stored in `t.FG_factor`
+  ```Matlab
+  fg = t.Compute_Foreground();
+  ```
+  - Foreground is determined by
+    1. Creating a mask with all pixels greater than the threshold
+    2. Eroding this mask with a small diamond (radius 2)
+    3. Computing the median image intensity of all mask pixels from each block of the image.
+  - Foreground is stored in `t.FG_factor`
 
 
 * `Compute_StripeArtifact` - Compute stripe artifact in image background or foreground. When using the Aperio slide reader, there is often a strip artifact that can be seen along the slow scan axis.
-```Matlab
-st = t.Compute_StripeArtifact(BG_or_FG)
-```
-    - Stripe is computed by
-        1. Compute the background or foreground mask (as in `Compute_Background`/`Compute_Foreground`)
-        2. Compute the median masked image intensity along entire rows of the image. (This assumes that the rows are the fast axis of the scanner.)
+  ```Matlab
+  st = t.Compute_StripeArtifact(BG_or_FG)
+  ```
+  - Stripe is computed by
+    1. Compute the background or foreground mask (as in `Compute_Background`/`Compute_Foreground`)
+    2. Compute the median masked image intensity along entire rows of the image. (This assumes that the rows are the fast axis of the scanner.)
 
 
 * `Compute_Sharpness` - Compute image sharpness
-```Matlab
-fg = t.Compute_Sharpness();
-```
-    - Sharpness is computed in each image block as the number of pixels with a fourier transform magnitude greater than the maximum fourier transform magnitude over 1000, and normalized by the square root of the number of pixels.
+  ```Matlab
+  fg = t.Compute_Sharpness();
+  ```
+  - Sharpness is computed in each image block as the number of pixels with a fourier transform magnitude greater than the maximum fourier transform magnitude over 1000, and normalized by the square root of the number of pixels.
 
 
 * `Measure_BasicProps` - Measure the basic properties (location, intensity, area) for each object
-```Matlab
-[feature,feature_names] = t.Measure_BasicProps(channelName)
-```
+  ```Matlab
+  [feature,feature_names] = t.Measure_BasicProps(channelName)
+  ```
 
 
 * `Measure_Intensity` - Measure only the object intensities
-```Matlab
-feature = t.Measure_Intensity(useParallel)
-```
+  ```Matlab
+  feature = t.Measure_Intensity(useParallel)
+  ```
 
 
 * `Write_Object_Mask` - Write the object mask to file, and optionally apply partitioning before writing
-```Matlab
-t.Write_Object_Mask(fileName, partitioner)
-```
-    - `partitioner` is an instance of class `ObjectPartitioner`
+  ```Matlab
+  t.Write_Object_Mask(fileName, partitioner)
+  ```
+  - `partitioner` is an instance of class `ObjectPartitioner`
 
 
 * `Compute_Channel_Corrections` - Compute the intensity and stripe corrections based on object intensities for general image channels.
-```Matlab
-[flatteningSurf, xStripe] = t.Compute_Channel_Corrections(x, y, I);
-```
-    - The background computation (`flatteningSurf`) uses the bottom 2%-4% of the object intensities.
-    - The stripe is computed relative to the object intensities (thus, it should be multiplied or divided).
+  ```Matlab
+  [flatteningSurf, xStripe] = t.Compute_Channel_Corrections(x, y, I);
+  ```
+  - The background computation (`flatteningSurf`) uses the bottom 2%-4% of the object intensities.
+  - The stripe is computed relative to the object intensities (thus, it should be multiplied or divided).
 
 
 * `Compute_DAPI_Corrections` - Compute the intensity and strope corrections based on object intensities for the DAPI channel (or any channel that stains all of the nuclei DNA, e.g. PI)
-```Matlab
-[FG_f, FG_o, Xstripe, G1Area, G1_idx] = t.Compute_DAPI_Corrections(x,y,I,A)
-```
-    - Fit the G1 band using the median intensity, and then fit the G2 band
-    - Compute corrections to flatten the G1 and G2 bands and position them at intensity values of 1 and 2, respectively.
-    - The stripe is computed relative to the object intensities (thus, it should be multiplied or divided).
+  ```Matlab
+  [FG_f, FG_o, Xstripe, G1Area, G1_idx] = t.Compute_DAPI_Corrections(x,y,I,A)
+  ```
+  - Fit the G1 band using the median intensity, and then fit the G2 band
+  - Compute corrections to flatten the G1 and G2 bands and position them at intensity values of 1 and 2, respectively.
+  - The stripe is computed relative to the object intensities (thus, it should be multiplied or divided).
 
 
 * `generateFunction` - Create a simple function that operates on an image based on a string expression.
-```Matlab
-fun = t.generateFunction(expression,removeUndefined,expandInput,requiredVars)
-% Ex.
-% expression = "(S - BG_o*BG_s)/(FG_f*FG_s)"
-% fun = t.generateFunction(expression,false,true,["S"])
-% fun
-%   Function handle
-%   @(S,x,y) (S - BG_o(x,y) .* BG_s(x)) / (FG_f(x,y) .* FB_s(x))
-```
-    - Allowed variables are `BG_o`, `BG_s`, `FG_o`, `FG_f`, `FG_s`, and any required variables.
+  ```Matlab
+  fun = t.generateFunction(expression,removeUndefined,expandInput,requiredVars)
+  % Ex.
+  % expression = "(S - BG_o*BG_s)/(FG_f*FG_s)"
+  % fun = t.generateFunction(expression,false,true,["S"])
+  % fun
+  %   Function handle
+  %   @(S,x,y) (S - BG_o(x,y) .* BG_s(x)) / (FG_f(x,y) .* FB_s(x))
+  ```
+  - Allowed variables are `BG_o`, `BG_s`, `FG_o`, `FG_f`, `FG_s`, and any required variables.
 
 
 * `generateCorrectionFunction` - Generate the correction function that corresponds to the `Image_Correction_Expression` property.
 
 
 * `clearCorrections` - Delete all current corrections
-```Matlab
-t.BG_offset = [];
-t.BG_stripeX = [];
-t.FG_offset = [];
-t.FG_factor = [];
-t.FG_stripeX = [];
-```
+  ```Matlab
+  t.BG_offset = [];
+  t.BG_stripeX = [];
+  t.FG_offset = [];
+  t.FG_factor = [];
+  t.FG_stripeX = [];
+  ```
 
 * `plot` - Plot one of the computed corrections
-```Matlab
-t.plot(name)
-```
-    - Name can be one of the following strings: `threshold`, `background`, `foreground_factor`, `foreground_offset`, `sharpness`, `stripe_background`, `stripe_foreground`
+  ```Matlab
+  t.plot(name)
+  ```
+  - Name can be one of the following strings: `threshold`, `background`, `foreground_factor`, `foreground_offset`, `sharpness`, `stripe_background`, `stripe_foreground`
 
 ### List of low level methods
 * `isEmpty`
