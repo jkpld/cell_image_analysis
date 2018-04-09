@@ -153,7 +153,7 @@ See the class definition for a list of all properties. Here a truncated list of 
   ```Matlab
   t.plot(name)
   ```
-  - Name can be one of the following strings: `threshold`, `background`, `foreground_factor`, `foreground_offset`, `sharpness`, `stripe_background`, `stripe_foreground`
+  - `name` can be one of the following strings: `threshold`, `background`, `foreground_factor`, `foreground_offset`, `sharpness`, `stripe_background`, `stripe_foreground`
 
 ### List of low level methods
 * `isEmpty`
