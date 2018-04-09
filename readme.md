@@ -91,6 +91,10 @@ featGroups(8) = HaralickTexture('GFP', defaultOptions);
 featGroups(9) = Granularity('DAPI', defaultOptions);
 featGroups(10) = Granularity('GFP', defaultOptions);
 
+% Set the partitioner and featureExtractor
+cE.nucleiPartitioner = partitioner;
+cE.featureExtractor.featureGroups = featGroups;
+
 % With everything setup, process the images.
 
 %% Processes
@@ -105,48 +109,3 @@ Correct_Image_Backgrounds(cE,true);
 pth = 'FeaturesFile.mat'; % path to save features
 Compute_Object_Features(cE, pth);
 ```
-<!--
-## Class `TiffImg`
-This class is a wrapper for the `tifflib` library. This class is much faster at repeated reading of small portions of large tiff files than Matlab's built in `Tiff` class.
-
-### High level methods
-
-##### Load tif image
-```Matlab
-t = TiffImg('path-to-img.tiff');
-```
-
-##### Threshold:
-```Matlab
-% Compute threshold for object segmentation
-th = t.Compute_Threshold();
-```
-- This uses an adaptive log-weighted otsu-thresholding similar to CellProfiler software.
-- The threshold is computed for each block of the image (specified by t.blockSize)
-- When applying the threshold to the image, the computed threshold values from each block
-  are linearly interpolated to get the threshold value at each pixel.
-- The computed threshold is stored in `t.threshold` and is optionally
-
-##### Compute background
-```Matlab
-% Compute image background
-bg = t.Compute_Background();
-```
-- Background is determined by 1) creating a mask with all pixels less than the threshold 2) eroding this mask with a small diamond (radius 2) 3) computing the median image intensity of all mask pixels from each block of the image.
-- Background is stored in `t.BG_offset`
-
-The images aquired with the Aperio slide reader can have a stripe artifact along the slow scan axis. This stripe artifact can be determined using
-```Matlab
-% Compute background stripe
-bg_s = t.Compute_StripeArtifact('background');
-```
-- The background stripe is computed relative to the background. That is, after computing the background, the image is _divided_ by the background, and then the background stripe is computed.
-- The background stripe is stored in `t.BG_stripeX`
-
-The background and background stripe can be computed with a single function call using
-```Matlab
-% Compute background and background stripe
-bg = t.Compute_Background(true);
-```
-
--->

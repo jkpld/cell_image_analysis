@@ -165,7 +165,7 @@ classdef TiffImg < matlab.mixin.Copyable
                 obj.FileID = uint64(0);
                 error('TiffImg:MissingMMPerPixel','The image description does not have a MPP (micron per pixel) field, which is required for this class.')
             end
-            
+
             obj.Acquisition_Info = info;
             obj.mmPerPixel = info.MPP/1000;
 
@@ -213,7 +213,7 @@ classdef TiffImg < matlab.mixin.Copyable
             numTiles = flip(numTiles);
             obj.numTiles = numTiles;
 
-            
+
             if ~isfield(info,'StripeWidth') || ~isfinite(info.StripeWidth)
                 str = ['The image description does not have a StripeWidth ',...
                     'field giving the width, in pixels, of each line scan ',...
@@ -225,17 +225,17 @@ classdef TiffImg < matlab.mixin.Copyable
                     'is not, then artifacts could appear in the ',...
                     'Threshold/Background/...'];
                 warning('TiffImg:MissingStripeWidth',str)
-                
+
                 obj.stripeWidth = nan;
                 obj.blockSize = max(obj.tileSize);
             else
                 obj.stripeWidth = info.StripeWidth;
-                
+
                 % Set the default block size to be the nearest tileSize
                 % multiple of the StripeWidth
                 obj.blockSize = round(obj.stripeWidth/max(obj.tileSize))*max(obj.tileSize);
             end
-            
+
 
             close(obj); % close the image file.
         end
@@ -257,7 +257,7 @@ classdef TiffImg < matlab.mixin.Copyable
                 obj.xEdges = [0:floor(obj.imageSize(2)/blockSize), obj.imageSize(2)/blockSize]*blockSize;
                 obj.yEdges = [0:floor(obj.imageSize(1)/blockSize), obj.imageSize(1)/blockSize]*blockSize;
             end
-            
+
 
             obj.xCenters = obj.xEdges(1:end-1) + diff(obj.xEdges)/2;
             obj.yCenters = obj.yEdges(1:end-1) + diff(obj.yEdges)/2;
@@ -365,7 +365,7 @@ classdef TiffImg < matlab.mixin.Copyable
                 I = cast(I,obj.workingClass);
                 I = I / cast(obj.maxSampleValue,obj.workingClass);
             end
-            
+
             if nargout > 1
                 [j,k] = ind2sub(size(obj.tiles),tile_idx+1);
                 y = obj.tile_y_inds + (j-1)*obj.tileSize(1);
@@ -410,7 +410,7 @@ classdef TiffImg < matlab.mixin.Copyable
                 end
 
                 I(tmpT_y_inds, tmpT_x_inds) = tmp;
-%                 clear tmp
+                %  clear tmp
             end
 
             if maxX
@@ -688,8 +688,8 @@ classdef TiffImg < matlab.mixin.Copyable
                 switch currentVars{i}
                     case 'BG_o'
                         BG_o = interpolator2d(obj.BG_offset.x, obj.BG_offset.y, obj.BG_offset.Z, expandInput); %#ok<NASGU>
-%                     case 'BG_f'
-%                         BG_f = interpolator2d(obj.BG_factor.x, obj.BG_factor.y, obj.BG_factor.Z, expandInput); %#ok<NASGU>
+                        %                     case 'BG_f'
+                        %                         BG_f = interpolator2d(obj.BG_factor.x, obj.BG_factor.y, obj.BG_factor.Z, expandInput); %#ok<NASGU>
                     case 'BG_s'
                         xd = (1:obj.imageSize(2)).';
                         if expandInput
