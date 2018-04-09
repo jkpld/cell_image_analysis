@@ -1,6 +1,8 @@
 # Cell image analysis
 A library of functions and classes to speed up the analysis of large images containing stained (immunofluorescence) cell nuclei (images ~20 mm x 20 mm with ~200,000 cells). There are methods for segmenting nuclei, image background and artifact correction, and feature extraction. Methods use GPU acceleration for image processing and features of each nuclei can be extracted in parallel on a GPU.
 
+![GitHub Logo](/docs/processing_img1.png)
+
 A high level overview of the classes and methods can be seen below. Note that several of the functions are specific for images where the nuclei DNA is stained, such as when using DAPI or PI. Further several methods are specific to processing images created using whole slide fluorescence readers.
 
 All code is written for use in Matlab. The tiff images are assumed to have been created with a Leica Aperio fluorescence slide scanner. These tiff images have their acquisition info stored in the `ImageDescription` tag (id: 270) of the tiff images. A requried piece of information in this information is `MPP` which gives the spatial scale of the image in microns-per-pixels
