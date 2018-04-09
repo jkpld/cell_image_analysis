@@ -46,7 +46,7 @@ classdef TiffImg < matlab.mixin.Copyable
         %  been assigned to the TiffImg yet, but they show up in the
         %  epxression, they are replaced with 1's.
         %
-        %   Example expression (this is also the default expression):
+        %   Example expression:
         %    (S - BG_o * BG_s + FG_o) / (FG_s * FG_f)
         Image_Correction_Expression(1,1) string {validateExpression(Image_Correction_Expression,"S")} = "S"
     end
