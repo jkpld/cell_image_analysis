@@ -34,7 +34,7 @@ paramNames = {'SubFileType', ...
     'ImageDescription', ...
     'Orientation'};
 
-maskID = tifflib('open',char(fileName),'w');
+maskID = ca_tifflib('open',char(fileName),'w');
 
 try
     
@@ -43,15 +43,15 @@ try
     t_ID = tiffImg.FileID;
 
     for i = 1:numel(paramNames)
-        tifflib('setField',maskID,Tiff.TagID.(char(paramNames{i})), ...
-            tifflib('getField',t_ID,Tiff.TagID.(char(paramNames{i}))));
+        ca_tifflib('setField',maskID,Tiff.TagID.(char(paramNames{i})), ...
+            ca_tifflib('getField',t_ID,Tiff.TagID.(char(paramNames{i}))));
     end
 
-    tifflib('setField',maskID,Tiff.TagID.Photometric,4)
-    tifflib('setField',maskID,Tiff.TagID.BitsPerSample,1) % set to logical
+    ca_tifflib('setField',maskID,Tiff.TagID.Photometric,4)
+    ca_tifflib('setField',maskID,Tiff.TagID.BitsPerSample,1) % set to logical
 
-    tifflib('setField',maskID,Tiff.TagID.ImageDescription, ...
-            [tifflib('getField',t_ID,Tiff.TagID.ImageDescription),'|imageMask']);
+    ca_tifflib('setField',maskID,Tiff.TagID.ImageDescription, ...
+            [ca_tifflib('getField',t_ID,Tiff.TagID.ImageDescription),'|imageMask']);
     
     
     if ~tiffImg.Threshold_After_Correction
@@ -154,7 +154,7 @@ try
     
 catch ME
     tiffImg.close();
-    tifflib('close',maskID)
+    ca_tifflib('close',maskID)
     if tiffImg.Use_GPU
         gpuDevice([]);
     end
@@ -163,7 +163,7 @@ catch ME
 end
 
 tiffImg.close();
-tifflib('close',maskID)
+ca_tifflib('close',maskID)
 
 end
 
@@ -198,6 +198,6 @@ for t = 1:numel(cTiles)
         tmpT_y_inds(tmpT_y_inds > szI(1)) = [];
     end
         
-    tifflib('writeEncodedTile', maskID, cTiles(t), I_blck(tmpT_y_inds,tmpT_x_inds));
+    ca_tifflib('writeEncodedTile', maskID, cTiles(t), I_blck(tmpT_y_inds,tmpT_x_inds));
 end
 end

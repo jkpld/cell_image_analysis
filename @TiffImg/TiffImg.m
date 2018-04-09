@@ -136,10 +136,10 @@ classdef TiffImg < matlab.mixin.Copyable
             fclose(fid);
             % -----------------------------------------------------------
 
-            obj.FileID = tifflib('open',filename,'r');
+            obj.FileID = ca_tifflib('open',filename,'r');
             obj.FileName = filename;
 
-            imageDescription = tifflib('getField',obj.FileID,270);
+            imageDescription = ca_tifflib('getField',obj.FileID,270);
             aqstnInfo = textscan(imageDescription,'%s','Delimiter','|');
 
             aqstnInfo = aqstnInfo{1};
@@ -160,7 +160,7 @@ classdef TiffImg < matlab.mixin.Copyable
             end
 
             if ~isfield(info,'MPP') || ~isfinite(info.MPP)
-                tifflib('close',obj.FileID);
+                ca_tifflib('close',obj.FileID);
                 obj.FileName = '';
                 obj.FileID = uint64(0);
                 error('TiffImg:MissingMMPerPixel','The image description does not have a MPP (micron per pixel) field, which is required for this class.')
@@ -170,24 +170,24 @@ classdef TiffImg < matlab.mixin.Copyable
             obj.mmPerPixel = info.MPP/1000;
 
 
-            sampleFormat = tifflib('getField',obj.FileID,339);
+            sampleFormat = ca_tifflib('getField',obj.FileID,339);
             switch sampleFormat
                 case 1
-                    numBits = tifflib('getField',obj.FileID,258);
+                    numBits = ca_tifflib('getField',obj.FileID,258);
                     obj.maxSampleValue = 2^numBits - 1;
                 case 2
-                    numBits = tifflib('getField',obj.FileID,258);
+                    numBits = ca_tifflib('getField',obj.FileID,258);
                     obj.maxSampleValue = 2^(numBits-1) - 1;
                 case 3
                     obj.maxSampleValue = 1;
                 otherwise
-                    tifflib('close',obj.FileID);
+                    ca_tifflib('close',obj.FileID);
                     obj.FileName = '';
                     obj.FileID = uint64(0);
                     error('TiffImg:unsupporetedFormat','The image has an unsupported format, Supported formats are uint, int, and floating point.')
             end
 
-            tmp = tifflib('readEncodedTile',obj.FileID,0);
+            tmp = ca_tifflib('readEncodedTile',obj.FileID,0);
             obj.imageClass = class(tmp);
 
             % Set the working class. Always work with a float type to have
@@ -205,8 +205,8 @@ classdef TiffImg < matlab.mixin.Copyable
                 end
             end
 
-            obj.imageSize = [tifflib('getField',obj.FileID,257), tifflib('getField',obj.FileID,256)];
-            obj.tileSize = [tifflib('getField',obj.FileID,323), tifflib('getField',obj.FileID,322)];
+            obj.imageSize = [ca_tifflib('getField',obj.FileID,257), ca_tifflib('getField',obj.FileID,256)];
+            obj.tileSize = [ca_tifflib('getField',obj.FileID,323), ca_tifflib('getField',obj.FileID,322)];
 
             numTiles = flip(ceil(obj.imageSize./obj.tileSize));
             obj.tiles = reshape(0:prod(numTiles)-1,numTiles)';
@@ -278,13 +278,13 @@ classdef TiffImg < matlab.mixin.Copyable
 
         function open(obj)
             if ( obj.FileID == 0 )
-                obj.FileID = tifflib('open',obj.FileName,'r');
+                obj.FileID = ca_tifflib('open',obj.FileName,'r');
             end
         end
 
         function close(obj)
             if ( obj.FileID ~= 0 )
-                tifflib('close',obj.FileID)
+                ca_tifflib('close',obj.FileID)
                 obj.FileID = uint64(0);
             end
         end
@@ -302,7 +302,7 @@ classdef TiffImg < matlab.mixin.Copyable
             counter = 1;
             obj.open()
             for tile_y = obj.tiles(:,col_idx)'
-                tmp = tifflib('readEncodedTile',obj.FileID,tile_y);%readEncodedTile(t,cTiles(i));
+                tmp = ca_tifflib('readEncodedTile',obj.FileID,tile_y);%readEncodedTile(t,cTiles(i));
                 [m,n] = size(tmp);
                 I(counter:counter+m-1, 1:n) = tmp;
                 counter = counter + m;
@@ -331,7 +331,7 @@ classdef TiffImg < matlab.mixin.Copyable
             counter = 1;
             obj.open()
             for tile_y = obj.tiles(row_idx,:)
-                tmp = tifflib('readEncodedTile',obj.FileID,tile_y);%readEncodedTile(t,cTiles(i));
+                tmp = ca_tifflib('readEncodedTile',obj.FileID,tile_y);%readEncodedTile(t,cTiles(i));
                 [m,n] = size(tmp);
                 I(1:m, counter:counter+n-1) = tmp;
                 counter = counter + n;
@@ -355,7 +355,7 @@ classdef TiffImg < matlab.mixin.Copyable
             % initialize array for image stripe
             I = zeros(obj.tileSize,obj.imageClass);
 
-            tmp = tifflib('readEncodedTile',obj.FileID,double(tile_idx));
+            tmp = ca_tifflib('readEncodedTile',obj.FileID,double(tile_idx));
 
             [m,n] = size(tmp);
             I(1:m, 1:n) = tmp;
@@ -395,7 +395,7 @@ classdef TiffImg < matlab.mixin.Copyable
             for t = 1:numel(cTiles)
 
                 [j,k] = ind2sub(szcTiles,t);
-                tmp = tifflib('readEncodedTile',obj.FileID,cTiles(t));
+                tmp = ca_tifflib('readEncodedTile',obj.FileID,cTiles(t));
 
                 tmpT_y_inds = obj.tile_y_inds + (j-1)*obj.tileSize(1);
                 tmpT_x_inds = obj.tile_x_inds + (k-1)*obj.tileSize(2);
@@ -449,7 +449,7 @@ classdef TiffImg < matlab.mixin.Copyable
             %   tiles : Nx4 array where the i'th row is [x1,y1,x2,y2].
             %     x1/x2 is the left/right-most tiles. y1/y2 is the
             %     top/bottom-most tiles. These are not the linear indices
-            %     that can be used to read in a tile with tifflib; they
+            %     that can be used to read in a tile with ca_tifflib; they
             %     must be converted to linear indices. The x/y indices are
             %     0 based.
 
