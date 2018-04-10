@@ -120,7 +120,7 @@ classdef Shape < FeatureGroup
             % ===========================================================
             % Object Boundaries
             %
-            B = bwboundariesmex(double(L), 8);
+            B = ca_bwboundariesmex(double(L), 8);
 %             B = bwboundaries(double(L), 8, 'noholes');
             
             % ===========================================================

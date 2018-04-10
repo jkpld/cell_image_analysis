@@ -15,6 +15,12 @@ if ~isfinite(smoothRadius)
     return;
 end
 
+% If less than 5 points, cannot smooth;
+if numel(z) < 5
+    Z = z;
+    return;
+end
+
 % If the surface is an integer, then convert it to single.
 if isinteger(z)
     z_class = class(z);

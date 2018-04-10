@@ -56,21 +56,31 @@ end
 
 % Copy ca_tifflib into the utilities folder --------------------------------
 
-% if ~any(strncmp('salr_pdistmex',names,11))
-    folder = fullfile(matlabroot,'toolbox','matlab','imagesci','private');
-    d = dir(folder);
-    names = {d.name};
-    nameIdx = strncmp('tifflib',names,7);
+% Add tifflib
+folder = fullfile(matlabroot,'toolbox','matlab','imagesci','private');
+d = dir(folder);
+names = {d.name};
+nameIdx = strncmp('tifflib',names,7);
 
-    if ~any(nameIdx)
-        error('cell_image_analysis:setup','File ''tifflib'' was not found in\n %s\nThis file is required. Try manually locating it; if found copy into the utilities folder and rename it to ''ca_tifflib.%s''.',folder,mexext)
-    end
+if ~any(nameIdx)
+    error('cell_image_analysis:setup','File ''tifflib'' was not found in\n %s\nThis file is required. Try manually locating it; if found copy into the utilities folder and rename it to ''ca_tifflib.%s''.',folder,mexext)
+end
 
-    copyfile(fullfile(folder,names{nameIdx}),fullfile(path,'utilities',['ca_' names{nameIdx}]))
-% end
+copyfile(fullfile(folder,names{nameIdx}),fullfile(path,'utilities',['ca_' names{nameIdx}]))
 fprintf('...Added tifflib\n')
 
-% K:\MATLAB\R2017a\toolbox\matlab\imagesci\private
+% Add bwboundariesmex
+folder = fullfile(matlabroot,'toolbox','images','images','private');
+if ~exist(fullfile(folder, ['bwboundariesmex.',mexext]),'file')
+    error('cell_image_analysis:setup','File ''bwboundariesmex'' was not found in\n %s\nThis file is required. Try manually locating it; if found copy into the utilities folder and rename it to ''ca_bwboundariesmex.%s''.',folder,mexext)
+end
+
+copyfile(fullfile(folder, ['bwboundariesmex.',mexext]),fullfile(path,'utilities',['ca_bwboundariesmex.',mexext]))
+
+fprintf('...Added bwboundariesmex\n')
+
+
+
 % Add subfolders of current location to path -----------------------------
 % (but do not include any .git repositories
 pths = split(string(genpath(path)),';');

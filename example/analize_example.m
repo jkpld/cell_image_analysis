@@ -17,7 +17,7 @@ cE = CellExperiment(["DAPI","GFP"], ["K:\RadiationLab\cell_image_analysis\exampl
 % algebraic expressions.
 %
 % Set DAPI correction:
-eE.Channel_TiffImgs(1).Image_Correction_Expression = "(S-BG_o*BG_s)/(FG_s*FG_f)";
+cE.Channel_TiffImgs(1).Image_Correction_Expression = "(S-BG_o*BG_s)/(FG_s*FG_f)";
 % This subtracts away the background and divides by the foreground correction
 % S : our image
 % BG_o : image background
@@ -30,13 +30,13 @@ eE.Channel_TiffImgs(1).Image_Correction_Expression = "(S-BG_o*BG_s)/(FG_s*FG_f)"
 %
 % After extracting the channel intensities for each object, we can apply an additional
 % correction to the intensities.
-eE.Channel_TiffImgs(1).ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression = "FG_o";
+cE.Channel_TiffImgs(1).ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression = "-FG_o";
 % Here we subtract away a forground ofset correction (FG_o) which will place the DAPI G1
 % band at value 1 and the DAPI G2 band at value 2.
 
 % Set GFP image corrections
-eE.Channel_TiffImgs(2).Image_Correction_Expression = "(S-BG_o*BG_s)/FG_s";
-eE.Channel_TiffImgs(2).ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression = "-FG_o";
+cE.Channel_TiffImgs(2).Image_Correction_Expression = "(S-BG_o*BG_s)/FG_s";
+cE.Channel_TiffImgs(2).ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression = "-FG_o";
 % Setup object segmentation
 % Object segmentation is performed using the DAPI channel. Segmentation has two steps.
 % - Segment all nuclei using adaptive log-weighted otsu thresholding
@@ -95,12 +95,14 @@ cE.featureExtractor.featureGroups = featGroups;
 
 % Processes
 % Compute object masks
-Create_Object_Mask(cE, imgPth(trials(i),"Mask"));
-
+pth = 'K:\RadiationLab\cell_image_analysis\example\Mask.tif';
+Create_Object_Mask(cE, pth);
+%%
 % Background correct the channels
 cE.Surface_Smoothing_Radius = nan;
 Correct_Image_Backgrounds(cE,true);
-
+%%
 % Extract features
-pth = 'FeaturesFile.mat'; % path to save features
+fprintf('Computing features...\n')
+pth = 'K:\RadiationLab\cell_image_analysis\example\FeaturesFile.mat'; % path to save features
 Compute_Object_Features(cE, pth);

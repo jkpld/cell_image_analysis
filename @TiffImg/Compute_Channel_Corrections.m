@@ -79,8 +79,10 @@ if DEBUG
 end
 
 % Now compute the stripe with two iterations
-
-[Xstripe1, stripe_x, ~, fsample] = Fit_Stripe_Artifact(x*tiffImg.mmPerPixel,I_c,'Threshold',1e-2,'generatePlots',DEBUG);
+rho = numel(x)/(range(x)*tiffImg.mmPerPixel);
+% initBin = max(200/rho,0.005)
+initBin = 0.005*(1 + 9*(200/rho>0.005));
+[Xstripe1, stripe_x, ~, fsample] = Fit_Stripe_Artifact(x*tiffImg.mmPerPixel,I_c,'Threshold',1e-2,'generatePlots',DEBUG,'initialBinSize',initBin);
 
 if isempty(fsample)
     % No stripe was detected

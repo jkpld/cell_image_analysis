@@ -820,7 +820,7 @@ classdef CellExperiment < handle
             a_flattener = interpolator2d(obj.DAPI_G1_Area.x,obj.DAPI_G1_Area.y,obj.DAPI_G1_Area.Z,false);
             a = X(:,Xn=="Shape_Area") ./ a_flattener(X(:,1),X(:,2));
 
-            d = X(:,Xn=="Intensity_DAPI_Integrated");
+            d = X(:,Xn=="Intensity_DAPI_Integrated");            
             mpp = obj.Channel_TiffImgs(1).mmPerPixel;
             inRange = a<6 & d<8 & d>0;% & (X(:,1)*mpp>4 & X(:,1)*mpp<14) & (X(:,2)*mpp>4 & X(:,2)*mpp<14);
 
@@ -856,6 +856,7 @@ classdef CellExperiment < handle
             options.cleanHexagonData = true;
             options.reductionMethod = 'density';
             options.binSize = [0.025,1];
+            
             da_dcmt = decimateData(d(inRange),a(inRange),[],options);
 
             % Plot the dapi vs area density

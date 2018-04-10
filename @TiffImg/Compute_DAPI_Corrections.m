@@ -46,7 +46,7 @@ else
     bin = options.binSize(1)*mmPP;
 end
 
-DEBUG = 0;
+DEBUG = 1;
 
 %% Initial correction. ----------------------------------------------------
 
@@ -85,8 +85,10 @@ if DEBUG
 end
 
 %% Remove the stripe artifact. ------------------------------------------
-
-[G1_stripe, G1_stripeX, ~, fsample] = Fit_Stripe_Artifact(x*mmPP,dapi_c,'Threshold',1e-2,'generatePlots',DEBUG);
+rho = numel(x)/(range(x)*mmPP);
+% initBin = max(200/rho,0.005)
+initBin = 0.005*(1 + 9*(200/rho>0.005));
+[G1_stripe, G1_stripeX, ~, fsample] = Fit_Stripe_Artifact(x*mmPP,dapi_c,'Threshold',1e-2,'generatePlots',DEBUG,'initialBinSize',initBin);
 
 if isempty(fsample)
     % No stripe was detected
