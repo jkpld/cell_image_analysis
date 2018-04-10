@@ -347,6 +347,8 @@ classdef CellExperiment < handle
                     ~isempty(postProcIntegratedInt_Offset{i});
             end
 
+            
+%             error('som error')
             % Check to see that we have the required information : we need
             % to have the object areas and centroids. These can be those
             % that were computed in Correct_Image_Backgrounds, or they can
@@ -384,12 +386,12 @@ classdef CellExperiment < handle
 
 
                 % iterate over x blocks
-                for blck_x = numBlcks(2):-1:1
+                for blck_x = 1:numBlcks(2)
 
                     for i = 1:N_ch, obj.Channel_TiffImgs(i).open(); end
                     obj.Mask.open();
 
-                    for blck_y = numBlcks(1):-1:1
+                    for blck_y = 1:numBlcks(1)
 
                         % Get image channels for current block
                         for i = N_ch:-1:1
@@ -506,6 +508,7 @@ classdef CellExperiment < handle
                                 case 'Intensity'
                                     II_idx = feature_names == "Intensity_" + obj.Channel_Names(i) + "_Integrated";
                                     MuI_idx = feature_names == "Intensity_" + obj.Channel_Names(i) + "_Mean";
+
                                     features(:,II_idx) = features(:,II_idx) + II_offset(crctn).';
                                     features(:,MuI_idx) = features(:,MuI_idx) + MuI_offset(crctn).';
                                 case 'RadialIntensity'
@@ -817,9 +820,9 @@ classdef CellExperiment < handle
             % Plot DAPI vs Area ------------------------------------------
 
             % Flatten Area
-            a_flattener = interpolator2d(obj.DAPI_G1_Area.x,obj.DAPI_G1_Area.y,obj.DAPI_G1_Area.Z,false);
-            a = X(:,Xn=="Shape_Area") ./ a_flattener(X(:,1),X(:,2));
-
+%             a_flattener = interpolator2d(obj.DAPI_G1_Area.x,obj.DAPI_G1_Area.y,obj.DAPI_G1_Area.Z,false);
+            a = X(:,Xn=="Shape_Area")/median(obj.DAPI_G1_Area.Z(:));% ./ a_flattener(X(:,1),X(:,2));
+% 
             d = X(:,Xn=="Intensity_DAPI_Integrated");            
             mpp = obj.Channel_TiffImgs(1).mmPerPixel;
             inRange = a<6 & d<8 & d>0;% & (X(:,1)*mpp>4 & X(:,1)*mpp<14) & (X(:,2)*mpp>4 & X(:,2)*mpp<14);

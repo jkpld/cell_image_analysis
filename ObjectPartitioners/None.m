@@ -3,7 +3,7 @@ classdef None < ObjectPartitioner
         function obj = None()
         end
         
-        function mask_partitioned = partition(obj, mask, ~)
+        function mask_partitioned = partition(obj, mask, ~, ~)
             mask_partitioned = mask;
         end
     end

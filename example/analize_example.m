@@ -3,8 +3,8 @@ pth_n = 'K:\RadiationLab\Cell_Incubation\Cancer\p24_GFP_small.tif';
 %%
 t = TiffImg(pth);
 %%
-internal_Write_Small_Image(t, pth_n, [2,10], [2,10])
-
+internal_Write_Small_Image(t, pth_n, [10,18], [10,18])
+disp here
 %%
 
 % Create an instance of the CellExperiment class. We have to image channels DAPI, and
@@ -30,7 +30,7 @@ cE.Channel_TiffImgs(1).Image_Correction_Expression = "(S-BG_o*BG_s)/(FG_s*FG_f)"
 %
 % After extracting the channel intensities for each object, we can apply an additional
 % correction to the intensities.
-cE.Channel_TiffImgs(1).ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression = "-FG_o";
+cE.Channel_TiffImgs(1).ObjectIntegratedIntensity_FeaturePostProcess_OffsetExpression = "FG_o";
 % Here we subtract away a forground ofset correction (FG_o) which will place the DAPI G1
 % band at value 1 and the DAPI G2 band at value 2.
 
@@ -75,6 +75,7 @@ defaultOptions = struct(...
 
 warning('off','FeatureGroup:extraOptions')
 
+clear featGroups
 featGroups(10) = EmptyFeature;
 featGroups(1) = Location('', defaultOptions);
 featGroups(2) = Shape('', defaultOptions);
@@ -86,7 +87,7 @@ featGroups(7) = HaralickTexture('DAPI', defaultOptions);
 featGroups(8) = HaralickTexture('GFP', defaultOptions);
 featGroups(9) = Granularity('DAPI', defaultOptions);
 featGroups(10) = Granularity('GFP', defaultOptions);
-
+featGroups(featGroups.isempty()) = [];
 % Set the partitioner and featureExtractor
 cE.nucleiPartitioner = partitioner;
 cE.featureExtractor.featureGroups = featGroups;
@@ -97,12 +98,29 @@ cE.featureExtractor.featureGroups = featGroups;
 % Compute object masks
 pth = 'K:\RadiationLab\cell_image_analysis\example\Mask.tif';
 Create_Object_Mask(cE, pth);
-%%
+%
 % Background correct the channels
 cE.Surface_Smoothing_Radius = nan;
 Correct_Image_Backgrounds(cE,true);
-%%
+%
 % Extract features
 fprintf('Computing features...\n')
 pth = 'K:\RadiationLab\cell_image_analysis\example\FeaturesFile.mat'; % path to save features
 Compute_Object_Features(cE, pth);
+
+%% Look at some cells in M-phase
+
+% Load up the features
+[X,Xn] = Load_Features(cE);
+
+% Normalize area
+a = X(:,Xn=="Shape_Area") / median(cE.DAPI_G1_Area.Z(:));
+d = X(:,Xn=="Intensity_DAPI_Integrated");            
+inRange = find(d<2.1 & d>1.9 & a<1.1 & a>0.9);% & (X(:,1)*mpp>4 & X(:,1)*mpp<14) & (X(:,2)*mpp>4 & X(:,2)*mpp<14);
+
+idx = inRange(randperm(numel(inRange),10));
+
+objImgs = cE.Extract_Object_Images(X(idx,1:2), ["DAPI","GFP","Mask"], [71,71]);
+
+
+viewNucleiImages(objImgs,["DAPI","GFP","Mask"])

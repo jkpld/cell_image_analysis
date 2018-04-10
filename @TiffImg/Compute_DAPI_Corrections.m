@@ -46,7 +46,7 @@ else
     bin = options.binSize(1)*mmPP;
 end
 
-DEBUG = 1;
+DEBUG = 0;
 
 %% Initial correction. ----------------------------------------------------
 
