@@ -258,6 +258,8 @@ classdef TiffImg < matlab.mixin.Copyable
                 obj.yEdges = [0:floor(obj.imageSize(1)/blockSize), obj.imageSize(1)/blockSize]*blockSize;
             end
 
+            obj.xEdges = unique(obj.xEdges);
+            obj.yEdges = unique(obj.yEdges);
 
             obj.xCenters = obj.xEdges(1:end-1) + diff(obj.xEdges)/2;
             obj.yCenters = obj.yEdges(1:end-1) + diff(obj.yEdges)/2;
