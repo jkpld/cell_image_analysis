@@ -7,8 +7,8 @@ function setup
 % James Kapaldo
 
 % Check dependancies -----------------------------------------------------
-if verLessThan('matlab','9.1')
-    error('cell_image_analysis:setup','The cell_image_analysis code requires at least Matlab 2016b because implicit expansion is heavily used.')
+if verLessThan('matlab','9.3')
+    error('cell_image_analysis:setup','The cell_image_analysis code requires at least Matlab 2017b. (Dependence on function str2sym.)')
 end
 verImg = ver('images');
 if isempty(verImg)
