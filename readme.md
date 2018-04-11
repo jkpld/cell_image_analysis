@@ -29,7 +29,7 @@ The tiff images are assumed to have been created with a Leica Aperio fluorescenc
 
 
 ## Example usage
-The example image (~4x4 mm^2) is a small portion of a full slide image with ~20000 cells. In this example, the nuclei will be segmented and partitioned, the images will be corrected, and features extracted. Finally, we will look at a summary of the computed features, and plot several nuclei likely to be in the M-phase.
+The example image (~4x4 mm<sup>2</sup>) is a small portion of a full slide image with ~20000 cells. In this example, the nuclei will be segmented and partitioned, the images will be corrected, and features extracted. Finally, we will look at a summary of the computed features, and plot several nuclei likely to be in the M-phase.
 
 ### Load images
 
