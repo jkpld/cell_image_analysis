@@ -148,7 +148,7 @@ qualitatively extract cell-phase from this distribution.
 ```Matlab
 cE.Create_Summary()
 ```
-![area_vs_dapi](/docs/area_vs_dapi_distribution.png)
+![area_vs_dapi](/docs/area_vs_dapi_distribution.PNG)
 
 ### Look at some cells likely in M-phase
 
@@ -178,4 +178,4 @@ View the nuclei
 ```Matlab
 viewNucleiImages(objImgs,["DAPI","GFP","Mask"])
 ```
-![example_nuclei](/docs/example_nuclei.png)
+![example_nuclei](/docs/example_nuclei.PNG)
