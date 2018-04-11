@@ -874,7 +874,8 @@ classdef CellExperiment < handle
             xlabel('DAPI')
             ylabel('Area')
             title({char(obj.Experiment_Description), 'DAPI vs Area'})
-            colorbar;
+            cb = colorbar;
+            cb.Label.String = 'log(number)';
             drawnow;
             setTheme(gcf,'dark')
 

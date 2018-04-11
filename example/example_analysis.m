@@ -10,7 +10,7 @@
 % Create an instance of the CellExperiment class. We have to image channels DAPI, and
 % GFP. Note, a DAPI channel is required for this class.
 % cE = CellExperiment(channel_names,channel_paths)
-cE = CellExperiment(["DAPI","GFP"], ["ca_DAPI.tif","ca_GFP.tif"]);
+cE = CellExperiment(["DAPI","GFP"], ["example\ca_DAPI.tif","example\ca_GFP.tif"]);
 
 %% Setup processing, object partitioner, and features to extract
 
@@ -96,7 +96,7 @@ cE.featureExtractor.featureGroups = featGroups;
 % With everything setup, process the images.
 
 % Compute object masks
-pth = 'K:\RadiationLab\cell_image_analysis\example\Mask.tif';
+pth = 'example\Mask.tif';
 Create_Object_Mask(cE, pth);
 
 % Background correct the channels
@@ -104,7 +104,7 @@ cE.Surface_Smoothing_Radius = nan;
 Correct_Image_Backgrounds(cE,true);
 
 % Extract features
-pth = 'K:\RadiationLab\cell_image_analysis\example\FeaturesFile.mat'; % path to save features
+pth = 'example\FeaturesFile.mat'; % path to save features
 Compute_Object_Features(cE, pth);
 
 % Create summary
