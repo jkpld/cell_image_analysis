@@ -19,7 +19,7 @@ All code is written for use in Matlab. The tiff images are assumed to have been 
 3. Run `setup.m`. This function will
     * Add the necessary files to your Matlab path.
     * Attempt to compile two C functions that will increase the program speed. If a C compiler is not found on your computer, then the code will still run, but it could be slower.
-4. Start by browsing the example located in the `example/` folder
+4. Start by browsing the example located in the `example/` folder, and described below.
 
 #### Installation Notes
 * The GitHub repository could take a few minutes to download as the repository is >100 MB. The majority of this space comes from the example images included.
