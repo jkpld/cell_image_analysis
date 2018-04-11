@@ -50,9 +50,9 @@ classdef displayProgress < handle
             obj.iteration = 0;
             
             showAt = unique(round(linspace(1,N,K+1)));
-            if numel(showAt) > 1
-                showAt(1) = [];
-            end
+%             if numel(showAt) > 1
+%                 showAt(1) = [];
+%             end
             
             obj.generate_display_at = showAt;
             obj.active = logical(active);
@@ -95,6 +95,11 @@ classdef displayProgress < handle
                 afterEach(Que, @obj.iteration_end);
             end
             obj.timer = tic();
+            
+            str = sprintf('%s >> %s %d/%d (?/?)...\n',datestr(now,31),obj.name,obj.iteration,obj.number_of_iterations);
+            obj.num_chars_written = length(str);
+            obj.first_print = 1;
+            fprintf('%s', str);
         end
 
         function iteration_end(obj,varargin)
