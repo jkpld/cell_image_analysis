@@ -201,3 +201,7 @@ for t = 1:numel(cTiles)
     ca_tifflib('writeEncodedTile', maskID, cTiles(t), I_blck(tmpT_y_inds,tmpT_x_inds));
 end
 end
+%-%
+%-% This is love: not that we loved God, but that he loved us and sent his
+%-% Son as an atoning sacrifice for our sins. (1 John 4:10)
+%-%

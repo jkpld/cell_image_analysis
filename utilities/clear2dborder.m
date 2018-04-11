@@ -21,3 +21,8 @@ marker(2:sz(1)-1,2:sz(2)-1) = false;
 
 on_border = imreconstruct(marker, bw);
 bw_clear = bw & ~on_border;
+%-%
+%-% For God so loved the world that he gave his one and only Son, that
+%-% whoever believes in him shall not perish but have eternal life. (John
+%-% 3:16)
+%-%

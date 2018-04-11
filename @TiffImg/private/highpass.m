@@ -29,3 +29,8 @@ xh([1:freq_cut_off_idx, end-freq_cut_off_idx+1:end],:) = 0;
 x_f = real(ifft(xh));
 
 
+
+%-%
+%-% This is love: not that we loved God, but that he loved us and sent his
+%-% Son as an atoning sacrifice for our sins. (1 John 4:10)
+%-%

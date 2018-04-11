@@ -37,8 +37,8 @@ zi = Z(yi,xi);
 
 end
 
+
 %-%
-%-% But he was pierced for our transgressions, he was crushed for our
-%-% iniquities; the punishment that brought us peace was on him, and by
-%-% his wounds we are healed. (Isaiah 53:5)
+%-% This is love: not that we loved God, but that he loved us and sent his
+%-% Son as an atoning sacrifice for our sins. (1 John 4:10)
 %-%

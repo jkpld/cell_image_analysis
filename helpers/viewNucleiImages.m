@@ -186,7 +186,9 @@ catch ME
     close(viewNucFig);
     rethrow(ME)
 end
+if nargout > 0 && (addClassification || addPhase)
 uiwait;
+end
 % if nargout > 0
 %     varargout{1} = viewNucFig;
 % end
@@ -244,114 +246,8 @@ uiwait;
             userClassified.(clsfctnGroupNames{groupNum}) = struct();
             userClassified.(clsfctnGroupNames{groupNum}).name = lower(classificationNames{groupNum+1});
             userClassified.(clsfctnGroupNames{groupNum}).classification = clsfctn(classificationIndex{groupNum+1},:).';
-%                 'name',classificationNames{groupNum+1}, ...
-%                 'classification',clsfctn(classificationIndex{groupNum+1},:).');
         end
-        
-%         userClassified.segmentation.classification
-%         if ~(isequal(clsfctn, prviouslySavedClsfctns) && isequal(prviouslySelectedSisterIndex,pairNucleiIdx)) % don't need to do anything if nothing changed
-%                         
-%             dontClsfy = logical(clsfctn(1,:));
-%             clsfctnIdx = selIdx(~dontClsfy);
-%             sisterIdx = pairNucleiIdx(~dontClsfy);
-%             clsfctn = clsfctn(:,~dontClsfy)';
-%             dontClsfy = selIdx(dontClsfy);
-% %             sisterIdx(sisterIdx==0) = uint8(intmax('uint8'));
-%             for groupNum = 1:numel(clsfctnGroupNames)
-%                 
-%                 groupName = clsfctnGroupNames{groupNum};
-%                 groupIndices = classificationIndex{groupNum+1};
-%                 
-%                 % If the group does not exist, create it.
-%                 if ~isfield(userClassified,groupName)
-%                     userClassified.(groupName) = struct('index',intmax('uint32')*ones(1000,1,'uint32'),'classification',intmax('uint8')*ones(1000,numel(groupIndices),'uint8'),'name',{{}},'counter',1);
-%                 end
-%                 
-%                 % If the group was just created, add in the classification
-%                 % names of the group. If the group was previously created,
-%                 % then make sure the new classification names match the old
-%                 % classification names
-%                 if isempty(userClassified.(groupName).name)
-%                     userClassified.(groupName).name = lower(classificationNames{groupNum+1});
-%                 else
-%                     if ~isequal(lower(userClassified.(groupName).name), lower(classificationNames{groupNum+1}))
-%                         error('veiwTrain:badClassificationNames', 'The classifications names in group %s do not match the names already in that group.', groupName)
-%                     end
-%                 end
-%                 
-%                 % Get the classifications for this group
-%                 groupClsfctn = clsfctn(:,groupIndices); % numNuclei x classificationOptions
-%                 
-%                 % remove the nuclei not classified
-%                 notClsfd = all(groupClsfctn==0,2);
-%                 clsfdNucleiIndices = uint32(clsfctnIdx(~notClsfd));
-%                 clsfdSisterIndices = uint32(sisterIdx(~notClsfd));
-%                 numClsfdNuclei = numel(clsfdNucleiIndices);
-%                 groupClsfctn(notClsfd,:) = [];
-%                 
-%                 % get the next index of the next element to be saved.
-%                 counter = userClassified.(groupName).counter;
-%                 
-%                 % add to the size of the index and value arrays if
-%                 % necessary  -- i know this may add the extra elements a
-%                 % bit before they are actually needed, but it should be
-%                 % fine
-%                 if (numClsfdNuclei + counter) > numel(userClassified.(groupName).index)
-%                     
-%                     userClassified.(groupName).index = [userClassified.(groupName).index; intmax('uint32')*ones(1000,1,'uint32')];
-%                     userClassified.(groupName).classification = [userClassified.(groupName).classification; intmax('uint8') *ones(1000,numel(groupIndices),'uint8')];
-%                     
-%                     if strcmp(groupName,'phase')
-%                         userClassified.(groupName).sister_index = [userClassified.(groupName).sister_index; intmax('uint32')*ones(1000,1,'uint32')];
-%                     end
-%                 end
-%                 
-%                 % before we save the new values, we need check if these
-%                 % nuclei have already been assigned. if they have been
-%                 % assigned and have the same value, fine; however, if they
-%                 % have been saved and have a different value, then we need
-%                 % to throw up a message asking the user to pick one.
-%                 % -- actually, just overwrite the previous classificaiton
-%                 
-%                 for j = 1:numClsfdNuclei
-%                     
-%                     prviousClsfctn = find(clsfdNucleiIndices(j) == userClassified.(groupName).index(1:counter-1));
-%                     
-%                     if ~isempty(prviousClsfctn)
-%                         
-%                         userClassified.(groupName).classification(prviousClsfctn,:) = groupClsfctn(j,:);
-%                         
-%                         if strcmp(groupName,'phase')
-%                             userClassified.(groupName).sister_index(prviousClsfctn) = clsfdSisterIndices(j);
-%                         end
-%                     else
-%                         userClassified.(groupName).index(counter) = clsfdNucleiIndices(j);
-%                         userClassified.(groupName).classification(counter,:) = groupClsfctn(j,:);
-%                         if strcmp(groupName,'phase')
-%                             userClassified.(groupName).sister_index(counter) = clsfdSisterIndices(j);
-%                         end
-%                         counter = counter + 1;
-%                     end
-%                 end
-% 
-%                 for j = 1:numel(dontClsfy)
-%                     
-%                     prviousClsfctn = find(dontClsfy(j) == userClassified.(groupName).index(1:counter-1));
-%                     
-%                     if ~isempty(prviousClsfctn)
-%                         
-%                         userClassified.(groupName).index(prviousClsfctn) = [];
-%                         userClassified.(groupName).classification(prviousClsfctn,:) = [];
-%                         if strcmp(groupName,'phase')
-%                             userClassified.(groupName).sister_index(prviousClsfctn) = [];
-%                         end
-%                         counter = counter - 1;
-%                     end
-%                 end
-%                 
-%                 userClassified.(groupName).counter = counter;
-%             end
-%         end
+
         close(viewNucFig);
     end
 
@@ -359,131 +255,7 @@ uiwait;
 end
 
 
-% 
-% function saveExit(~,~)
-%         
-%         % This function is a bit slopy and can be made better by only
-%         % updated the classifications of the nuclei whose classifications
-%         % actually changed. Determine if the classifications changed by
-%         % comparing the columns of clsfctn and previouslySavedClsfctns. 
-%         %
-%         % Leaving it as is should not waist much time though since we only
-%         % classify maybe 45 at a time.
-%         
-%         clsfctn = reshape([nucleiClassification.Value],size(nucleiClassification));
-%         
-%         if ~isequal(clsfctn, prviouslySavedClsfctns)
-%                         
-%             dontClsfy = logical(clsfctn(1,:));
-%             clsfctnIdx = selIdx(~dontClsfy);
-%             sisterIdx = pairNucleiIdx(~dontClsfy);
-%             clsfctn = clsfctn(:,~dontClsfy)';
-%             dontClsfy = selIdx(dontClsfy);
-%             
-%             for groupNum = 1:numel(clsfctnGroupNames)
-%                 
-%                 groupName = clsfctnGroupNames{groupNum};
-%                 
-%                 % If the group does not exist, create it.
-%                 if ~isfield(obj.userClassified,groupName)
-%                     obj.userClassified.(groupName) = struct('index',intmax('uint32')*ones(1000,1,'uint32'),'value',intmax('uint8')*ones(1000,1,'uint8'),'name',{{}},'counter',1);
-%                     if strcmp(groupName,'phase')
-%                         obj.userClassified.(groupName).sister_index = intmax('uint32')*ones(1000,1,'uint32');
-%                     end
-%                 end
-%                 
-%                 % If the group was just created, add in the classification
-%                 % names of the group. If the group was previously created,
-%                 % then make sure the new classification names match the old
-%                 % classification names
-%                 if isempty(obj.userClassified.(groupName).name)
-%                     obj.userClassified.(groupName).name = lower(classificationNames{groupNum+1});
-%                 else
-%                     if ~isequal(lower(obj.userClassified.(groupName).name), lower(classificationNames{groupNum+1}))
-%                         error('veiwTrain:badClassificationNames', 'The classifications names in group %s do not match the names already in that group.', groupName)
-%                     end
-%                 end
-%                 
-%                 
-%                 % Get the classifications for this group
-%                 groupClsfctn = clsfctn(:,classificationIndex{groupNum+1});
-%                 
-%                 % remove the nuclei not classified
-%                 notClsfd = all(groupClsfctn==0,2);
-%                 groupClsfctnIdx = uint32(clsfctnIdx(~notClsfd));
-%                 groupSisterIdx = uint32(sisterIdx(~notClsfd));
-%                 numClsfctns = numel(groupClsfctnIdx);
-%                 groupClsfctn(notClsfd,:) = [];
-%                 
-%                 % get the next index of the next element to be saved.
-%                 counter = obj.userClassified.(groupName).counter;
-%                 
-%                 % add to the size of the index and value arrays if
-%                 % necessary  -- i know this may add the extra elements a
-%                 % bit before they are actually needed, but it should be
-%                 % fine
-%                 if (numClsfctns + counter) > numel(obj.userClassified.(groupName).index)
-%                     obj.userClassified.(groupName).index = [obj.userClassified.(groupName).index; intmax('uint32')*ones(1000,1,'uint32')];
-%                     obj.userClassified.(groupName).classification = [obj.userClassified.(groupName).classification; intmax('uint8') *ones(1000,1,'uint8')];
-%                     if strcmp(groupName,'phase')
-%                         if ~isfield(obj.userClassified.(groupName),'sister_index')
-%                             obj.userClassified.(groupName).sister_index = intmax('uint32')*ones(numel(obj.userClassified.(groupName).index),1,'uint32');
-%                         else
-%                             obj.userClassified.(groupName).sister_index = [obj.userClassified.(groupName).sister_index; intmax('uint32')*ones(1000,1,'uint32')];
-%                         end
-%                     end
-%                 end
-%                 
-%                 % create the classification values
-%                 groupClsfctnValue = uint8(sum(bsxfun(@times,groupClsfctn,0:size(groupClsfctn,2)-1),2));
-%                 
-%                 
-%                 % before we save the new values, we need check if these
-%                 % nuclei have already been assigned. if they have been
-%                 % assigned and have the same value, fine; however, if they
-%                 % have been saved and have a different value, then we need
-%                 % to throw up a message asking the user to pick one.
-%                 % -- actually, just overwrite the previous classificaiton
-%                 
-%                 for j = 1:numClsfctns
-%                     prviousClsfctn = find(groupClsfctnIdx(j) == obj.userClassified.(groupName).index(1:counter-1));
-%                     if ~isempty(prviousClsfctn)
-%                         obj.userClassified.(groupName).classification(prviousClsfctn) = groupClsfctnValue(j);
-%                         if strcmp(groupName,'phase') && ~isnan(groupSisterIdx(j))
-%                             if ~isfield(obj.userClassified.(groupName),'sister_index')
-%                                 obj.userClassified.(groupName).sister_index = intmax('uint32')*ones(numel(obj.userClassified.(groupName).index),1,'uint32');
-%                             end
-%                             obj.userClassified.(groupName).sister_index(prviousClsfctn) = groupSisterIdx(j);
-%                         end
-%                     else
-%                         obj.userClassified.(groupName).index(counter) = groupClsfctnIdx(j);
-%                         obj.userClassified.(groupName).classification(counter) = groupClsfctnValue(j);
-%                         if strcmp(groupName,'phase') && ~isnan(groupSisterIdx(j))
-%                             if ~isfield(obj.userClassified.(groupName),'sister_index')
-%                                 obj.userClassified.(groupName).sister_index = intmax('uint32')*ones(numel(obj.userClassified.(groupName).index),1,'uint32');
-%                             end
-%                             obj.userClassified.(groupName).sister_index(counter) = groupSisterIdx(j);
-%                         end
-%                         counter = counter + 1;
-%                     end
-%                 end
-% 
-%                 for j = 1:numel(dontClsfy)
-%                     prviousClsfctn = find(dontClsfy(j) == obj.userClassified.(groupName).index(1:counter-1));
-%                     if ~isempty(prviousClsfctn)
-%                         obj.userClassified.(groupName).index(prviousClsfctn) = [];
-%                         obj.userClassified.(groupName).classification(prviousClsfctn) = [];
-%                         if strcmp(groupName,'phase')
-%                             if isfield(obj.userClassified.(groupName),'sister_index')
-%                                 obj.userClassified.(groupName).sister_index(prviousClsfctn) = [];
-%                             end
-%                         end
-%                         counter = counter - 1;
-%                     end
-%                 end
-%                 
-%                 obj.userClassified.(groupName).counter = counter;
-%             end
-%         end
-%         close(viewNucFig);
-%     end
+%-%
+%-% This is love: not that we loved God, but that he loved us and sent his
+%-% Son as an atoning sacrifice for our sins. (1 John 4:10)
+%-%

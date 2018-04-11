@@ -61,8 +61,8 @@ end
 % using varargin
 
 
+
 %-%
-%-% For God so loved the world that he gave his one and only Son, that
-%-% whoever believes in him shall not perish but have eternal life. (John
-%-% 3:16)
+%-% This is love: not that we loved God, but that he loved us and sent his
+%-% Son as an atoning sacrifice for our sins. (1 John 4:10)
 %-%

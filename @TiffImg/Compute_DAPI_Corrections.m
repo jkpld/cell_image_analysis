@@ -404,3 +404,8 @@ end
 % G1_stripe3 = decimateData(x(idx),ones(sum(idx),1),dapi_c(idx),'binSize',[stripeBinWidth,100],'defaultValue',1);  % Get median dapi value from bins 100 pixels wide along x direction
 % G1_stripe3.Z = highpass(G1_stripe3.Z(:,2),2.5,100*mmPP) + 1;
 % dapi_c = dapi_c ./ nakeinterp1(G1_stripe3.X(:,1), G1_stripe3.Z(:,1), x); % Divide out the median value
+%-%
+%-% But he was pierced for our transgressions, he was crushed for our
+%-% iniquities; the punishment that brought us peace was on him, and by
+%-% his wounds we are healed. (Isaiah 53:5)
+%-%

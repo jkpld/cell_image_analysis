@@ -27,7 +27,7 @@ cE.Channel_TiffImgs(1).Image_Correction_Expression = "(S-BG_o*BG_s)/(FG_s*FG_f)"
 %  stripe artifactalong the slow scan axis. This stripe artifact is
 %  computed relative to the image background, therefore the total
 %  background is BG_o * BG_s.
-% FG_f : foreground correction factor - for the DAPI channel, this factor 
+% FG_f : foreground correction factor - for the DAPI channel, this factor
 %  will flatten the G1 and G2 bands across the image.
 % FG_s : foreground stripe (same as BG_s)
 %

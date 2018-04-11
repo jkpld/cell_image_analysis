@@ -171,8 +171,9 @@ end
 end
 
 
+
 %-%
-%-% But he was pierced for our transgressions, he was crushed for our
-%-% iniquities; the punishment that brought us peace was on him, and by
-%-% his wounds we are healed. (Isaiah 53:5)
+%-% For God so loved the world that he gave his one and only Son, that
+%-% whoever believes in him shall not perish but have eternal life. (John
+%-% 3:16)
 %-%
