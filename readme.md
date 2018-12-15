@@ -137,7 +137,7 @@ Correct_Image_Backgrounds(cE,true);
 
 Extract features
 ```Matlab
-pth = 'K:\RadiationLab\cell_image_analysis\example\FeaturesFile.mat'; path to save features
+pth = 'example\FeaturesFile.mat'; path to save features
 Compute_Object_Features(cE, pth);
 ```
 
